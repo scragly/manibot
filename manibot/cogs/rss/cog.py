@@ -7,7 +7,7 @@ import feedparser
 import aiohttp
 import discord
 from discord import Webhook, AsyncWebhookAdapter, Embed
-from manibot import command, group, Cog, checks, utils
+from manibot import command, group, Cog, checks
 
 HATIGARMRSS = "https://www.hatigarmscans.net/feed"
 
@@ -29,38 +29,35 @@ class RSS(Cog):
     def __unload(self):
         self.stop_updates()
 
-    @property
-    def feed_table(self):
-        return self.bot.dbi.table('feed_data')
+    def stop_updates(self):
+        if not self.update_task:
+            return False
+        self.update_task.cancel()
+        self.update_task = None
+        return True
 
-    @property
-    def settings_table(self):
-        return self.bot.dbi.table('feed_settings')
+    def start_updates(self):
+        if self.update_task:
+            return False
+        self.update_task = self.bot.loop.create_task(self.update_data())
+        return True
 
-    async def settings(self, guild_id, *fields):
-        query = self.settings_table.query.where(guild_id=guild_id)
-        if not fields:
-            return await query.get_one()
-        else:
-            return await query.get_value(*fields)
+    async def update_data(self):
+        while True:
+            await asyncio.sleep(30)
+            rawdata = await self.get_feed()
+            if not rawdata:
+                logger.warning('No data received from RSS Feed')
+            else:
+                self.data = feedparser.parse(rawdata)
+                if not self.last_item_id:
+                    self.last_item_id = await self.get_last_item()
+                if self.is_updated:
+                    await self.update_feed_db()
+                    await self.send_to_webhooks()
 
-    async def all_webhooks(self):
-        query = self.settings_table.query
-        records = await query.get()
-        data = []
-        for record in records:
-            rcrd_data = dict(record)
-            rcrd_data['webhook'] = Webhook.from_url(
-                rcrd_data['webhook_url'],
-                adapter=AsyncWebhookAdapter(self.bot.session))
-            data.append(rcrd_data)
-        return data
-
-    async def get_last_item(self):
-        query = self.feed_table.query.order_by('updated', asc=False).limit(1)
-        last_item = await query.get_value('item_id')
-        self.last_item_id = last_item
-        return last_item
+            await asyncio.sleep(30)
+            continue
 
     async def get_feed(self):
         try:
@@ -73,43 +70,11 @@ class RSS(Cog):
             logger.error(f'Feed Connector Error: Exception: {e}')
             return None
 
-    def is_updated(self):
-        return self.data.entries[0].id != self.last_item_id
-
-    async def update_data(self):
-        while True:
-            await asyncio.sleep(30)
-            rawdata = await self.get_feed()
-            if not rawdata:
-                logger.warning('No data received from RSS Feed')
-            else:
-                self.data = feedparser.parse(rawdata)
-                if not self.last_item_id:
-                    self.last_item_id = await self.get_last_item()
-                if self.is_updated():
-                    await self.notify()
-
-            await asyncio.sleep(30)
-            continue
-
-    def get_poster_url(self, item_url):
-        split = urllib.parse.urlsplit(item_url)
-        join = 'http://hatigarmscans.net/uploads' + split.path
-        imgurl = join.rsplit('/', 1)[0] + '/cover/cover_250x350.jpg'
-        return imgurl
-
-    def start_updates(self):
-        if self.update_task:
-            return False
-        self.update_task = self.bot.loop.create_task(self.update_data())
-        return True
-
-    def stop_updates(self):
-        if not self.update_task:
-            return False
-        self.update_task.cancel()
-        self.update_task = None
-        return True
+    async def get_last_item(self):
+        query = self.feed_table.query.order_by('updated', asc=False).limit(1)
+        last_item = await query.get_value('item_id')
+        self.last_item_id = last_item
+        return last_item
 
     async def update_feed_db(self):
         feed_insert = self.feed_table.insert
@@ -125,6 +90,66 @@ class RSS(Cog):
                 summary=str(item.summary), content=str(item.content)
             )
         await feed_insert.commit(do_update=False)
+        await self.get_last_item()
+
+    async def send_to_webhooks(self):
+        embeds = self.build_embeds(self.new_items)
+        msgs = self.split_list(embeds, 10)
+        for wh_data in await self.all_webhooks():
+            webhook = wh_data['webhook']
+            role = wh_data['sub_role_id']
+            avatar = wh_data['avatar'] or self.avatar
+            delay = wh_data['avatar'] or 0
+            self.bot.loop.create_task(
+                self.notify(webhook, role, avatar, delay, msgs))
+
+    async def all_webhooks(self):
+        query = self.settings_table.query
+        records = await query.get()
+        data = []
+        for record in records:
+            rcrd_data = dict(record)
+            rcrd_data['webhook'] = Webhook.from_url(
+                rcrd_data['webhook_url'],
+                adapter=AsyncWebhookAdapter(self.bot.session))
+            data.append(rcrd_data)
+        return data
+
+    async def notify(self, webhook, role, avatar, delay, messages):
+        await asyncio.sleep(delay)
+        for embeds in messages:
+            if embeds == messages[0]:
+                ping = f'<@&{role}>' if role else None
+            else:
+                ping = None
+            await webhook.send(
+                ping, embeds=embeds, username='New Update!', avatar_url=avatar)
+            await asyncio.sleep(0.5)
+
+    @property
+    def is_updated(self):
+        return self.data.entries[0].id != self.last_item_id
+
+    @property
+    def feed_table(self):
+        return self.bot.dbi.table('feed_data')
+
+    @property
+    def settings_table(self):
+        return self.bot.dbi.table('feed_settings')
+
+    async def settings(self, guild_id, *fields):
+        query = self.settings_table.query.where(guild_id=guild_id)
+        if not fields:
+            return await query.get_one()
+        else:
+            return await query.get_value(*fields)
+
+    def get_poster_url(self, item_url):
+        split = urllib.parse.urlsplit(item_url)
+        join = 'http://hatigarmscans.net/uploads' + split.path
+        imgurl = join.rsplit('/', 1)[0] + '/cover/cover_250x350.jpg'
+        return imgurl
 
     @staticmethod
     def split_list(l, n):
@@ -132,24 +157,6 @@ class RSS(Cog):
         for i in range(0, len(l), n):
             data.append(l[i:i + n])
         return data
-
-    async def notify(self):
-        await self.update_feed_db()
-        embeds = self.build_embeds(self.new_items)
-        msgs = self.split_list(embeds, 10)
-        for wh_data in await self.all_webhooks():
-            webhook = wh_data['webhook']
-            role_id = wh_data['sub_role_id']
-            for msg_embeds in msgs:
-                if msg_embeds == msgs[0]:
-                    ping = f'<@&{role_id}>' if role_id else None
-                else:
-                    ping = None
-                await webhook.send(
-                    ping,
-                    embeds=msg_embeds,
-                    username='New Update!',
-                    avatar_url=wh_data['avatar'] or self.avatar)
 
     @property
     def new_items(self):
@@ -200,39 +207,38 @@ class RSS(Cog):
 
     @group(name='rss', invoke_without_command=True)
     async def _rss(self, ctx):
-        data = await self.get_feed()
-        if not data:
-            return await ctx.error('RSS Feed down.')
-        await ctx.success('RSS Feed up.')
+        async with ctx.typing():
+            data = await self.get_feed()
+            if not data:
+                return await ctx.error('RSS Feed is down.')
+            await ctx.success('RSS Feed is up.')
 
     @_rss.command()
     @checks.is_admin()
     async def test(self, ctx, ping: bool = False, number=1):
         data = feedparser.parse(HATIGARMRSS)
-        embeds = []
         items = data.entries[0:number]
+        embeds = self.build_embeds(reversed(items))
+        msgs = self.split_list(embeds, 10)
         settings = await self.settings(ctx.guild.id)
         wh_url = settings['webhook_url']
         role_id = settings['sub_role_id'] if ping else None
         avatar = settings['avatar'] or self.avatar
+        delay = settings['delay'] or 0
         if not wh_url:
             return await ctx.error('Webhook not registered for this guild')
         webhook = Webhook.from_url(
             wh_url, adapter=AsyncWebhookAdapter(self.bot.session))
-        for item in reversed(items):
-            embed_data = self.build_embed(item.title, item.id, item.updated, item.summary)
-            embeds.append(Embed.from_data(embed_data))
-        msgs = self.split_list(embeds, 10)
-        for msg_embeds in msgs:
-            if msg_embeds == msgs[0]:
-                ping = f'<@&{role_id}>' if role_id else None
-            else:
-                ping = None
-            await webhook.send(
-                ping,
-                embeds=msg_embeds,
-                username='New Update!',
-                avatar_url=avatar)
+        await self.notify(webhook, role_id, avatar, delay, msgs)
+
+    @_rss.command()
+    @checks.is_mod()
+    async def setdelay(self, ctx, seconds_delay: int):
+        """Sets the guilds rss webhook notification delay in seconds."""
+        insert = self.settings_table.insert(
+            guild_id=ctx.guild.id, delay=seconds_delay)
+        await insert.commit(do_update=True)
+        await ctx.ok()
 
     @_rss.command()
     @checks.is_co_owner()
@@ -256,7 +262,7 @@ class RSS(Cog):
 
     @_rss.command()
     @checks.is_mod()
-    async def setavatar(self, ctx, avatar_url):
+    async def setavatar(self, ctx, avatar_url = None):
         """Sets the guilds rss webhook avatar."""
         if avatar_url.startswith('<') and avatar_url.endswith('>'):
             avatar_url = avatar_url.lstrip('<')
@@ -268,10 +274,14 @@ class RSS(Cog):
 
     @_rss.command()
     @checks.is_mod()
-    async def setrole(self, ctx, role: discord.Role):
+    async def setrole(self, ctx, role: discord.Role = None):
         """Sets the guilds rss webhook notification role."""
+        if not role:
+            role_id = None
+        else:
+            role_id = role.id
         insert = self.settings_table.insert(
-            guild_id=ctx.guild.id, sub_role_id=role.id)
+            guild_id=ctx.guild.id, sub_role_id=role_id)
         await insert.commit(do_update=True)
         await ctx.ok()
 
@@ -293,7 +303,8 @@ class RSS(Cog):
         member = member or ctx.author
         role_id = await self.settings(ctx.guild.id, 'sub_role_id')
         if not role_id:
-            await ctx.error("A notification role hasn't been setup yet.")
+            return await ctx.error(
+                "A notification role hasn't been setup yet.")
         role = ctx.get.role(role_id)
         await member.add_roles(role)
         await ctx.ok()
@@ -307,7 +318,8 @@ class RSS(Cog):
         member = member or ctx.author
         role_id = await self.settings(ctx.guild.id, 'sub_role_id')
         if not role_id:
-            await ctx.error("A notification role hasn't been setup yet.")
+            return await ctx.error(
+                "A notification role hasn't been setup yet.")
         role = ctx.get.role(role_id)
         await member.remove_roles(role)
         await ctx.ok()
@@ -316,6 +328,8 @@ class RSS(Cog):
     @checks.is_admin()
     async def taskstatus(self, ctx):
         """Check on the status of the feed update background task."""
+        if not self.update_task:
+            return await ctx.codeblock('No Running Update Task')
         msg = asyncio.coroutines._format_coroutine(self.update_task._coro)
         if self.update_task._state == 'FINISHED':
             if self.update_task._exception is not None:
