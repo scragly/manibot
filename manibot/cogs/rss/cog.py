@@ -2,6 +2,7 @@ import logging
 import asyncio
 import urllib
 import datetime
+import html
 import feedparser
 import aiohttp
 import discord
@@ -141,13 +142,13 @@ class RSS(Cog):
             role_id = wh_data['sub_role_id']
             for msg_embeds in msgs:
                 if msg_embeds == msgs[0]:
-                    ping = f'<@&{role_id}>'
+                    ping = f'<@&{role_id}>' if role_id else None
                 else:
                     ping = None
                 await webhook.send(
                     ping,
                     embeds=msg_embeds,
-                    username='New Releases!',
+                    username='New Update!',
                     avatar_url=wh_data['avatar'] or self.avatar)
 
     @property
@@ -166,6 +167,10 @@ class RSS(Cog):
             embeds.append(Embed.from_data(embed_data))
         return embeds
 
+    @staticmethod
+    def html_text(text):
+        return html.unescape(html.unescape(text))
+
     def build_embed(self, name, page_url, timestamp, summary):
         if isinstance(timestamp, datetime.datetime):
             timestamp = timestamp.strftime("%Y-%m-%dT%H:%M:%S")
@@ -182,7 +187,7 @@ class RSS(Cog):
                 "url"    : poster_url
             },
             "author"     :{
-                "name"   : name,
+                "name"   : self.html_text(name),
                 "url"    : page_url
             }
         }
@@ -220,7 +225,7 @@ class RSS(Cog):
         msgs = self.split_list(embeds, 10)
         for msg_embeds in msgs:
             if msg_embeds == msgs[0]:
-                ping = f'<@&{role_id}>'
+                ping = f'<@&{role_id}>' if role_id else None
             else:
                 ping = None
             await webhook.send(
