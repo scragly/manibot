@@ -86,10 +86,10 @@ class Context(commands.Context):
             return value
 
     async def error(self, title, details=None, log_level=None,
-                    exc: Exception = None):
+                    exc: Exception = None, **kwargs):
         """Submit an error to log and reply with error message"""
         msg = await self.embed(
-            title=title, description=details, msg_type='error')
+            title=title, description=details, msg_type='error', **kwargs)
         if exc:
             raise exc(details)
         elif log_level:
@@ -100,20 +100,23 @@ class Context(commands.Context):
             log(log_msg)
         return msg
 
-    async def success(self, title=None, details=None, send=True):
+    async def success(self, title=None, details=None, send=True, **kwargs):
         """Quick send or build an info embed response."""
         if title:
-            return await self.embed(title, details, msg_type='success', send=send)
+            return await self.embed(
+                title, details, msg_type='success', send=send, **kwargs)
         else:
             await self.ok()
 
-    async def info(self, title, details=None, send=True):
+    async def info(self, title, details=None, send=True, **kwargs):
         """Quick send or build an info embed response."""
-        return await self.embed(title, details, msg_type='info', send=send)
+        return await self.embed(
+            title, details, msg_type='info', send=send, **kwargs)
 
-    async def warning(self, title, details=None, send=True):
+    async def warning(self, title, details=None, send=True, **kwargs):
         """Quick send or build an info embed response."""
-        return await self.embed(title, details, msg_type='warning', send=send)
+        return await self.embed(
+            title, details, msg_type='warning', send=send, **kwargs)
 
     async def embed(self, title, description=None, plain_msg='', *,
                     msg_type=None, title_url=None, colour=None,
@@ -142,7 +145,7 @@ class Context(commands.Context):
         return await self.send(plain_msg, embed=embed)
 
     async def ask(self, message, *, timeout: float = 30.0,
-                  autodelete: bool = True, options: list = None,
+                  autodelete: bool = False, options: list = None,
                   author_id: int = None, destination: Messageable = None,
                   react_dict: dict = None):
         """An interactive reaction confirmation dialog.
@@ -181,23 +184,23 @@ class Context(commands.Context):
         if not custom_reacts:
             cek = '\u20e3'
             react_dict = {
-                "1" : {
+                1 : {
                     "emoji":"1"+cek,
                     "value":1
                 },
-                "2" : {
+                2 : {
                     "emoji":"2"+cek,
                     "value":2
                 },
-                "3" : {
+                3 : {
                     "emoji":"3"+cek,
                     "value":3
                 },
-                "4" : {
+                4 : {
                     "emoji":"4"+cek,
                     "value":4
                 },
-                "5" : {
+                5 : {
                     "emoji":"5"+cek,
                     "value":5
                 },
@@ -257,10 +260,12 @@ class Context(commands.Context):
 
         author_id = author_id or self.author.id
 
-        def check(emoji, message_id, channel_id, user_id):
-            if message_id != msg.id or user_id != author_id:
+        def react_check(reaction, user):
+            if user.id != self.author.id:
                 return False
-            return is_valid_emoji(str(emoji))
+            if reaction.message.id != msg.id:
+                return False
+            return is_valid_emoji(str(reaction.emoji))
 
         for emoji in emoji_list:
             # str cast in case of _ProxyEmoji
@@ -269,12 +274,13 @@ class Context(commands.Context):
             await msg.add_reaction(emoji)
 
         try:
-            emoji, *__, = await self.bot.wait_for('raw_reaction_add', check=check, timeout=timeout)
+            emoji, *__, = await self.bot.wait_for('reaction_add', check=react_check, timeout=timeout)
             # str cast in case of _ProxyEmojis
             return emoji_lookup[str(emoji)]
         except asyncio.TimeoutError:
             return None
         finally:
+            await msg.clear_reactions()
             if autodelete:
                 await msg.delete()
 
