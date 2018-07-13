@@ -97,7 +97,8 @@ class DatabaseInterface:
                 for rcrd in rcrds:
                     result.append(rcrd)
             return result
-        except asyncpg.exceptions.InterfaceError:
+        except asyncpg.exceptions.InterfaceError as e:
+            self.log.error(f'Exception {type(e)}: {e}')
             await self.recreate_pool()
             return await self.execute_query(query, *query_args)
 
