@@ -86,9 +86,8 @@ class Core:
     @checks.is_co_owner()
     async def _game(self, ctx, *, game: str):
         """Sets Bot's game status"""
-        status = ctx.me.status
         game = discord.Game(name=game)
-        await ctx.bot.change_presence(status=status, game=game)
+        await ctx.bot.change_presence(activity=game)
         embed = make_embed(msg_type='success', title='Game set.')
         await ctx.send(embed=embed)
 
