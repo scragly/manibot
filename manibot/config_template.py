@@ -7,7 +7,7 @@ bot_token = 'your_token_here'
 bot_prefix = '!'
 bot_master = 12345678903216549878
 bot_coowners = [174764205927432192,]
-preload_extensions = ['rss','dev','utilities']
+preload_extensions = ['series', 'rss','dev','utilities']
 
 # minimum required permissions for bot user
 bot_permissions = 268822592
