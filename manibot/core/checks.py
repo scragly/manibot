@@ -59,4 +59,13 @@ async def check_cog_enabled(ctx, default=True):
 def cog_enabled():
     return commands.check(check_cog_enabled)
 
+async def check_guild_has_rss_role(ctx):
+    rss_cog = ctx.bot.cogs['RSS']
+    role_id = await rss_cog.settings(ctx.guild.id, 'sub_role_id')
+    if role_id:
+        return True
+    else:
+        return False
 
+def guild_has_rss_role():
+    return commands.check(check_guild_has_rss_role)
