@@ -2,8 +2,7 @@ from itertools import zip_longest, chain
 from more_itertools import partition
 
 from .errors import PostgresError, SchemaError, ResponseError, QueryError
-from .sqltypes import (BooleanSQL, DatetimeSQL, DecimalSQL, IntegerSQL,
-                       IntervalSQL, SQLType, StringSQL)
+from . import sqltypes
 
 class SQLOperator:
 
@@ -106,7 +105,7 @@ class Column:
                  required=False, default=None, unique=False, table=None):
         self.name = name
         if data_type:
-            if not isinstance(data_type, SQLType):
+            if not isinstance(data_type, sqltypes.SQLType):
                 raise TypeError('Data types must be SQLType.')
         self.data_type = data_type
         self.primary_key = primary_key
@@ -178,7 +177,7 @@ class Column:
     def from_dict(cls, data):
         name = data.pop('name')
         data_type = data.pop('data_type')
-        data_type = SQLType.from_dict(data_type)
+        data_type = sqltypes.SQLType.from_dict(data_type)
         return cls(name, data_type, **data)
 
     @property
@@ -190,14 +189,12 @@ class Column:
             if isinstance(self.default, str) and isinstance(self.data_type, str):
                 default = f"'{self.default}'"
             elif isinstance(self.default, bool):
-                default = str(default).upper()
+                default = str(self.default).upper()
             else:
                 default = f"{self.default}"
-            sql.append(default)
+            sql.append(f"DEFAULT {default}")
         elif self.unique:
             sql.append('UNIQUE')
-        elif self.primary_key:
-            sql.append('PRIMARY KEY')
         if self.required:
             sql.append('NOT NULL')
         return ' '.join(sql)
@@ -243,32 +240,32 @@ class Column:
 
 class IDColumn(Column):
     def __init__(self, name, **kwargs):
-        super().__init__(name, IntegerSQL(big=True), **kwargs)
+        super().__init__(name, sqltypes.IntegerSQL(big=True), **kwargs)
 
 class StringColumn(Column):
     def __init__(self, name, **kwargs):
-        super().__init__(name, StringSQL(), **kwargs)
+        super().__init__(name, sqltypes.StringSQL(), **kwargs)
 
 class IntColumn(Column):
     def __init__(self, name, big=False, small=False, **kwargs):
-        super().__init__(name, IntegerSQL(big=big, small=small), **kwargs)
+        super().__init__(name, sqltypes.IntegerSQL(big=big, small=small), **kwargs)
 
 class BoolColumn(Column):
     def __init__(self, name, **kwargs):
-        super().__init__(name, BooleanSQL(), **kwargs)
+        super().__init__(name, sqltypes.BooleanSQL(), **kwargs)
 
 class DatetimeColumn(Column):
     def __init__(self, name, *, timezone=False, **kwargs):
-        super().__init__(name, DatetimeSQL(timezone=timezone), **kwargs)
+        super().__init__(name, sqltypes.DatetimeSQL(timezone=timezone), **kwargs)
 
 class DecimalColumn(Column):
     def __init__(self, name, *, precision=None, scale=None, **kwargs):
         super().__init__(
-            name, DecimalSQL(precision=precision, scale=scale), **kwargs)
+            name, sqltypes.DecimalSQL(precision=precision, scale=scale), **kwargs)
 
 class IntervalColumn(Column):
     def __init__(self, name, field=False, **kwargs):
-        super().__init__(name, IntervalSQL(field), **kwargs)
+        super().__init__(name, sqltypes.IntervalSQL(field), **kwargs)
 
 class TableOld:
     """Represents a database table."""
@@ -446,12 +443,14 @@ class Table:
         """Generate SQL for creating the table."""
         sql = f"CREATE TABLE {name} ("
         sql += ', '.join(col.to_sql for col in columns)
+        if not primaries:
+            primaries = [col.name for col in columns if col.primary_key]
         if primaries:
             if isinstance(primaries, str):
                 sql += f", CONSTRAINT {name}_pkey PRIMARY KEY ({primaries})"
             elif isinstance(primaries, (list, tuple, set)):
                 sql += (f", CONSTRAINT {name}_pkey"
-                        f" PRIMARY KEY ({', '.join(primaries)}))")
+                        f" PRIMARY KEY ({', '.join(primaries)})")
         sql += ")"
         return sql
 
@@ -463,12 +462,14 @@ class Table:
                 raise SchemaError("No columns for created table.")
             columns = self.new_columns
         sql += ', '.join(col.to_sql for col in columns)
+        if not primaries:
+            primaries = [col.name for col in columns if col.primary_key]
         if primaries:
             if isinstance(primaries, str):
                 sql += f", CONSTRAINT {self.name}_pkey PRIMARY KEY ({primaries})"
             elif isinstance(primaries, (list, tuple, set)):
                 sql += (f", CONSTRAINT {self.name}_pkey"
-                        f" PRIMARY KEY ({', '.join(primaries)}))")
+                        f" PRIMARY KEY ({', '.join(primaries)})")
         sql += ")"
         try:
             await self.dbi.execute_transaction(sql)
@@ -857,7 +858,7 @@ class Insert:
         if not do_update is None and not self._primaries:
             self._primaries = await self._from.columns.get_primaries()
         sql, data = self.sql(do_update)
-        await self._dbi.execute_transaction(sql, *data)
+        return await self._dbi.execute_transaction(sql, *data)
 
     def set_columns(self, *columns):
         """Declares the columns for positional arg data entry."""
