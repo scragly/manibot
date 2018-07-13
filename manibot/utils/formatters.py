@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import html
 
 from io import BytesIO
 
@@ -148,3 +149,12 @@ def convert_to_bool(argument):
         return False
     else:
         return None
+
+def unescape_html(text):
+    return html.unescape(html.unescape(text))
+
+def split_list(l, n):
+    data = []
+    for i in range(0, len(l), n):
+        data.append(l[i:i + n])
+    return data
