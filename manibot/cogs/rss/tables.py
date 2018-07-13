@@ -11,11 +11,16 @@ def setup(bot):
         schema.StringColumn('summary'),
         schema.StringColumn('content')
         ]
+
     feed_settings = bot.dbi.table('feed_settings')
     feed_settings.new_columns = [
-        schema.IntColumn('guild_id', big=True, primary_key=True),
+        schema.IDColumn('guild_id', primary_key=True),
         schema.StringColumn('webhook_url'),
-        schema.IntColumn('sub_role_id', big=True),
-        schema.StringColumn('avatar')
+        schema.IDColumn('sub_role_id'),
+        schema.StringColumn('avatar'),
+        schema.IntColumn('delay', default=60),
+        schema.BoolColumn('ping', default=True),
+        schema.BoolColumn('enabled')
         ]
+
     return [feed_data, feed_settings]
