@@ -1,13 +1,17 @@
-import logging
 import asyncio
-import urllib
 import datetime
-import feedparser
+import logging
+import urllib
+
 import aiohttp
+import bs4
+import feedparser
+
 import discord
-from discord import Webhook, AsyncWebhookAdapter, Embed
-from manibot import command, group, Cog, checks
-from manibot.utils.formatters import unescape_html, split_list
+from discord import AsyncWebhookAdapter, Embed, Webhook
+
+from manibot import Cog, checks, command, group
+from manibot.utils.formatters import split_list, unescape_html
 
 HATIGARMRSS = "https://www.hatigarmscans.net/feed"
 
@@ -117,8 +121,8 @@ class RSS(Cog):
                     return await r.text()
                 logger.error(f'Feed Connect Error: Status: {r.status}')
             return None
-        except aiohttp.ClientConnectorError as e:
-            logger.error(f'Feed Connector Error: Exception: {e}')
+        except aiohttp.ClientError as e:
+            logger.error(f'Feed Error ({type(e)}) - Exception: {e}')
             return None
 
     async def get_last_item(self):
@@ -181,6 +185,7 @@ class RSS(Cog):
         logger.info(f'Send To Webhooks: Start looping webhooks.')
 
         titles = [i.title.rsplit('#', 1)[0].strip() for i in new_items]
+        urls = [i.id for i in new_items]
 
         for wh_data in await self.all_webhooks():
             guild_id = wh_data['guild_id']
@@ -217,7 +222,8 @@ class RSS(Cog):
 
             self.bot.loop.create_task(
                 self.notify(
-                    webhook, global_role, series_roles, avatar, delay, msgs))
+                    webhook, global_role, series_roles,
+                    avatar, delay, msgs, urls))
 
     async def all_webhooks(self):
         query = self.settings_table.query
@@ -231,7 +237,9 @@ class RSS(Cog):
             data.append(rcrd_data)
         return data
 
-    async def notify(self, wh, global_role, series_roles, avatar, delay, msgs):
+    async def notify(
+            self, wh, global_role, series_roles, avatar, delay, msgs, urls):
+
         logger.info(
             f"Notify Webhook ({wh.url}): "
             f"global_role={global_role}, delay={delay}, avatar={avatar}")
@@ -241,6 +249,28 @@ class RSS(Cog):
             f"Delaying for {delay} seconds")
 
         await asyncio.sleep(delay)
+
+        logger.info(f"Notify Webhook ({wh.url}): Check Chapters")
+
+        while True:
+            failed = []
+            for url in urls:
+                logger.info(f"Notify Webhook ({wh.url}): Checking {url}.")
+                result = await self.get_first_page(url)
+                if result:
+                    logger.info(f"Notify Webhook ({wh.url}): {url} OK.")
+                else:
+                    failed.append(url)
+                    logger.info(f"Notify Webhook ({wh.url}): {url} NOT READY.")
+            if failed:
+                logger.info(
+                    f"Notify Webhook ({wh.url}): "
+                    f"{len(failed)} failed. "
+                    "Waiting for 15 seconds and checking again.")
+                urls = failed
+                await asyncio.sleep(15)
+            else:
+                break
 
         logger.info(
             f"Notify Webhook ({wh.url}): "
@@ -258,6 +288,43 @@ class RSS(Cog):
 
         logger.info(
             f"Notify Webhook ({wh.url}): Complete")
+
+    async def test_chapter(self, url):
+        if url.endswith('/'):
+            url = url[:-1]
+        page_url = url + '/1'
+        try:
+            async with self.bot.session.get(page_url) as r:
+                return r.status == 200
+        except aiohttp.ClientError as e:
+            logger.error(f'Chapter Test Error ({type(e)}) - Exception: {e}')
+            return None
+
+    async def get_first_page(self, url):
+        try:
+            async with self.bot.session.get(url) as r:
+                print(r.url)
+                print(r.status)
+                if r.status != 200:
+                    return False
+                content = await r.text()
+                soup = bs4.BeautifulSoup(content, 'html.parser')
+                allimgs = soup.find("div", {"id": "all"})
+                if not allimgs:
+                    return False
+                firstimg = allimgs.find("img")
+                if not firstimg:
+                    return False
+                return firstimg['data-src']
+        except aiohttp.ClientError as e:
+            logger.error(f'Chapter Test Error ({type(e)}) - Exception: {e}')
+            return None
+
+    @command()
+    @checks.is_co_owner()
+    async def firstpage(self, ctx, url):
+        r = await self.get_first_page(url)
+        await ctx.send(str(r))
 
     @property
     def is_updated(self):
