@@ -195,10 +195,11 @@ class Series(Cog):
         data['Categories'] = '\n'.join(textwrap.wrap(
             ', '.join(data['Categories']), 30))
         data['Tags'] = '\n'.join(textwrap.wrap(', '.join(data['Tags']), 30))
-        data['Chapters'] = '\n'.join(
-            [f"[{k}]({v})" for k, v in data['Chapters'].items()])
-        import json
-        print(json.dumps(data, indent=4))
+        chapters = data.pop('Chapters')
+        chapters = chapters[:5] if len(chapters) > 5 else chapters
+        chapters = [(k.replace(series, 'Chapter'), v) for k, v in chapters]
+        data['Recent Chapters'] = '\n'.join(
+            [f"[{k}]({v})" for k, v in chapters])
         embed = make_embed(
             msg_type='info',
             title=series,
@@ -208,6 +209,7 @@ class Series(Cog):
         return embed
 
     @series.command(name='web')
+    @checks.is_admin()
     async def get_webpage(self, ctx, *, series):
         series = await self.check_series_input(ctx, series)
         data = await self.get_series(series)
@@ -233,7 +235,7 @@ class Series(Cog):
 
         chapter_data = soup.find_all('h5', class_='chapter-title-rtl')
 
-        chapters = {i.a.get_text():i.a['href'] for i in chapter_data}
+        chapters = [(i.a.get_text(), i.a['href']) for i in chapter_data]
         info['Chapters'] = chapters
 
         await ctx.send(embed=self.web_info_embed(series, **info))
