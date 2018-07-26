@@ -23,7 +23,7 @@ setup(
     packages=find_packages(),
 
     install_requires=[
-        'discord.py>=1.0',
+        'discord.py>',
         'python-dateutil>=2.6',
         'asyncpg>=0.13',
         'python-Levenshtein>=0.12',
