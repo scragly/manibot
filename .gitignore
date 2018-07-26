@@ -106,3 +106,4 @@ venv.bak/
 # project specific logs
 **/*.log*
 config.py
+.vscode
