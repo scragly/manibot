@@ -3,16 +3,31 @@ from enum import Enum
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 
-def get_match(word_list: list, word: str, score_cutoff: int = 60):
+def get_match(word_list: list, word: str, score_cutoff: int = 60, partial=False):
     """Uses fuzzywuzzy to see if word is close to entries in word_list
 
     Returns a tuple of (MATCH, SCORE)
     """
-    result = process.extractOne(
-        word, word_list, scorer=fuzz.ratio, score_cutoff=score_cutoff)
+    if partial:
+        result = process.extractOne(
+            word, word_list, scorer=fuzz.partial_ratio, score_cutoff=score_cutoff)
+    else:
+        result = process.extractOne(
+            word, word_list, scorer=fuzz.ratio, score_cutoff=score_cutoff)
     if not result:
         return (None, None)
     return result
+
+def get_matches(word_list: list, word: str, score_cutoff: int = 60, partial=False):
+    """Uses fuzzywuzzy to see if word is close to entries in word_list
+
+    Returns a list of tuples with (MATCH, SCORE)
+    """
+    if partial:
+        return process.extractBests(
+            word, word_list, scorer=fuzz.partial_ratio, score_cutoff=score_cutoff)
+    return process.extractBests(
+        word, word_list, scorer=fuzz.ratio, score_cutoff=score_cutoff)
 
 def get_partial_match(word_list: list, word: str, score_cutoff: int = 60):
     """Uses fuzzywuzzy to see if word is close to entries in word_list
@@ -25,16 +40,7 @@ def get_partial_match(word_list: list, word: str, score_cutoff: int = 60):
         return (None, None)
     return result
 
-def find_matches(word_list: list, word: str, score_cutoff: int = 60):
-    """Uses fuzzywuzzy to see if word is close to entries in word_list
-
-    Returns a tuple of (MATCH, SCORE)
-    """
-    result = process.extractBests(
-        word, word_list, scorer=fuzz.ratio, score_cutoff=score_cutoff)
-    if not result:
-        return []
-    return result
+find_matches = get_matches
 
 class FuzzyEnum(Enum):
     """Enumeration with fuzzy-matching classmethods."""
