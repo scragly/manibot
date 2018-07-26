@@ -29,7 +29,13 @@ setup(
         'python-Levenshtein>=0.12',
         'fuzzywuzzy',
         'psutil',
-        'aiocontextvars'
+        'aiocontextvars',
+        'colorthief'
+        'more_itertools',
+        'bs4',
+        'feedparser',
+        'pytz',
+        'pendulum'
     ],
 
     dependency_links=[
