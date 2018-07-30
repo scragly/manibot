@@ -24,11 +24,9 @@ class Whip(Cog):
     async def whip_by_hati(self, channel):
         folder = os.path.join(os.path.dirname(__file__), 'gifs', 'hati')
         chosen = os.path.join(folder, random.choice(os.listdir(folder)))
-        print(chosen)
         await channel.send(file=discord.File(chosen))
 
     async def whip_staff(self, channel):
         folder = os.path.join(os.path.dirname(__file__), 'gifs', 'staff')
         chosen = os.path.join(folder, random.choice(os.listdir(folder)))
-        print(chosen)
         await channel.send(file=discord.File(chosen))
