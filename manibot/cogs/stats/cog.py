@@ -107,7 +107,7 @@ class Statistics:
         fig, ax = plt.subplots(linewidth=0, sharey=True, tight_layout=True)
         fig.set_size_inches(8, 5)
         ax.tick_params(labelsize=12, color='lightgrey', labelcolor='lightgrey')
-        ax.barh(list(data.keys()), list(data.values()), color='r', height=1.0, linewidth=0)
+        ax.barh(list(data.keys()), list(data.values()), color='r', height=1.0, linewidth=1, edgecolor='black')
         ax.invert_yaxis()
 
         plot_bytes = io.BytesIO()
