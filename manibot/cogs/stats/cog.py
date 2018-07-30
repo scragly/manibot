@@ -1,8 +1,13 @@
 import io
+import os
 import typing
 
 import discord
 import matplotlib
+
+if os.name != 'nt':
+    matplotlib.use('Agg')
+
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
