@@ -15,6 +15,7 @@ class Dev:
     def __init__(self, bot):
         self.bot = bot
         self._last_result = None
+        self._last_eval_task = None
 
     def cleanup_code(self, content):
         """Automatically removes code blocks from the code."""
@@ -24,6 +25,19 @@ class Dev:
 
         # remove `foo`
         return content.strip('` \n')
+
+    @command()
+    @checks.is_owner()
+    async def stopeval(self, ctx):
+        if self._last_eval_task:
+            self._last_eval_task.cancel()
+            self._last_eval_task = None
+            return await ctx.success('Last eval cancelled')
+        else:
+            return await ctx.error('No ongoing eval task.')
+
+    async def do_eval(self, to_compile, env):
+        exec(to_compile, env)
 
     @command(name='eval')
     @checks.is_owner()
@@ -48,8 +62,11 @@ class Dev:
         to_compile = (f'async def func():\n{textwrap.indent(body, "  ")}')
 
         try:
-            exec(to_compile, env)
+            self._last_eval_task = ctx.bot.loop.create_task(self.do_eval(to_compile, env))
+            # exec(to_compile, env)
+            await self._last_eval_task
         except Exception as e:
+            self._last_eval_task = None
             return await ctx.send(f'```py\n{e.__class__.__name__}: {e}\n```')
 
         func = env['func']
@@ -76,6 +93,8 @@ class Dev:
             else:
                 self._last_result = ret
                 await ctx.send(f'```py\n{value}{ret}\n```')
+
+        self._last_eval_task = None
 
     @command(aliases=['cls'])
     @checks.is_owner()
