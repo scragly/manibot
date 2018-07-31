@@ -14,7 +14,7 @@ class Whip(Cog):
             return
         if not message.guild.id in [351755506341117954, 302958707241648128]:
             return
-        if not ':whip:' in message.clean_content.lower():
+        if not ':whip:' in message.clean_content:
             return
         if message.author.id in [214932117287600128]:
             await self.whip_by_hati(message.channel)
