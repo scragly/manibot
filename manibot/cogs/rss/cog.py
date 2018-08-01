@@ -77,7 +77,7 @@ class RSSEntry:
 
     async def series_title(self):
         series_title = self.title.rsplit('#', 1)[0].strip()
-        return await self.bot.series.match_series(series_title)[0]
+        return (await self.bot.series.match_series(series_title))[0]
 
     @property
     def chapter(self):
