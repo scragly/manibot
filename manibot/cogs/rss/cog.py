@@ -243,10 +243,12 @@ class RSS(Cog):
             logger.info(f'  Parsing Feed Data')
             entries = feedparser.parse(feed_text).entries
             if not entries:
-                logger.error(' No Entries Found')
+                logger.error(' No Entries Found - Sleeping Until Next Update')
+                await asyncio.sleep(120)
                 continue
 
             # get reversed new entries, converted to RSSEntry objects
+            logger.info(f'  Getting New Entries')
             new_entries = await self.get_new_entries(entries)
             if not new_entries:
                 logger.info('  No New Entries')
