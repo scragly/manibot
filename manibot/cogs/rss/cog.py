@@ -131,8 +131,9 @@ class RSSEntry:
         imgurl = join.rsplit('/', 1)[0] + '/cover/cover_250x350.jpg'
         return imgurl
 
-    async def embed_data(self):
-        preview = await self.first_page()
+    @property
+    def embed_data(self):
+        poster = self.poster_url
 
         data = {
             "color"      : 2272250,
@@ -141,7 +142,7 @@ class RSSEntry:
                 "text"   : "Updated"
             },
             "thumbnail"  :{
-                "url"    : preview
+                "url"    : poster
             },
             "author"     :{
                 "name"   : unescape_html(self.title),
@@ -159,8 +160,7 @@ class RSSEntry:
         return data
 
     async def embed(self):
-        embed_data = await self.embed_data()
-        return Embed.from_data(embed_data)
+        return Embed.from_data(self.embed_data)
 
     async def get_role(self, guild_id):
         return self.bot.series.get_series_role(guild_id, self.series_title)
@@ -175,8 +175,7 @@ class RSSEntry:
             pings = f"<@&{webhook.sub_role_id}> {series_ping}"
         else:
             pings = ""
-        embed = await self.embed_data()
-        await webhook.webhook.send(pings, embed=embed)
+        await webhook.webhook.send(pings, embed=self.embed_data)
 
     async def send_to_channel(self, channel):
         embed = await self.embed()
