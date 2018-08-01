@@ -163,7 +163,8 @@ class RSSEntry:
         return Embed.from_data(self.embed_data)
 
     async def get_role(self, guild_id):
-        return self.bot.series.get_series_role(guild_id, self.series_title)
+        return await self.bot.series.get_series_role(
+            guild_id, self.series_title)
 
     async def get_mention(self, guild_id):
         role = await self.get_role(guild_id)
