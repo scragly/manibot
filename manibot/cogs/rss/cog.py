@@ -159,7 +159,8 @@ class RSSEntry:
                                f"[Read it at Hatigarm Scans!]({self.item_id})")
         return data
 
-    async def embed(self):
+    @property
+    def embed(self):
         return Embed.from_data(self.embed_data)
 
     async def get_role(self, guild_id):
@@ -177,11 +178,10 @@ class RSSEntry:
             pings = f"<@&{webhook.sub_role_id}> {series_ping}"
         else:
             pings = ""
-        await webhook.webhook.send(pings, embed=self.embed_data)
+        await webhook.webhook.send(pings, embed=self.embed)
 
     async def send_to_channel(self, channel):
-        embed = await self.embed()
-        await channel.send(embed=embed)
+        await channel.send(embed=self.embed)
 
 
 class RSS(Cog):
