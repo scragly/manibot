@@ -451,8 +451,8 @@ class RSS(Cog):
         results = await query.limit(number).get()
         entries = [RSSEntry(self.bot, Map(dict(r))) for r in results]
 
-        for entry in entries:
-            await entry.send_to_webhook(record)
+        for entry in reversed(entries):
+            await entry.send_to_webhook(record, do_ping=ping)
         await ctx.ok()
 
     @_rss.command()
