@@ -136,7 +136,7 @@ class RSSEntry:
 
         data = {
             "color"      : 2272250,
-            "timestamp"  : self.updated,
+            "timestamp"  : self.updated.strftime("%Y-%m-%dT%H:%M:%S"),
             "footer"     :{
                 "text"   : "Updated"
             },
