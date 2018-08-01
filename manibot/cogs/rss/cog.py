@@ -11,7 +11,8 @@ import discord
 from discord import AsyncWebhookAdapter, Embed, Webhook
 
 from manibot import Cog, checks, command, group
-from manibot.utils.formatters import split_list, unescape_html
+from manibot.utils.formatters import unescape_html
+from manibot.utils.datatypes import Map
 
 HATIGARMRSS = "https://www.hatigarmscans.net/feed"
 
@@ -23,8 +24,166 @@ def get_poster_url(item_url):
     imgurl = join.rsplit('/', 1)[0] + '/cover/cover_250x350.jpg'
     return imgurl
 
+
+class RSSEntry:
+
+    __slots__ = ('bot', 'dbi', 'data', 'title', 'link', 'author',
+                 'summary', 'content', 'item_id', 'updated')
+
+    def __init__(self, bot, data):
+        self.bot = bot
+        self.dbi = bot.dbi
+        self.data = data
+        self.title = data.title
+        self.link = data.link
+        self.author = data.author
+        self.summary = data.summary
+        self.content = str(data.content)
+
+        # db data won't have it under id, but item_id
+        if not data.id:
+            self.item_id = data.item_id
+        else:
+            self.item_id = data.id
+
+        # db data is already datetime object
+        if isinstance(data.updated, str):
+            self.updated = datetime.datetime.strptime(
+                data.updated.rsplit('+', 1)[0], "%Y-%m-%dT%H:%M:%S")
+        else:
+            self.updated = data.updated
+
+    @property
+    def data_table(self):
+        return self.dbi.table('feed_data')
+
+    @property
+    def query(self):
+        return self.data_table.query.where(item_id=self.item_id)
+
+    async def exists(self):
+        return bool(await self.query.get_value('item_id'))
+
+    async def get(self):
+        return await self.query.get()
+
+    async def insert(self):
+        insert = self.data_table.insert(
+            item_id=self.item_id, title=self.title, link=self.link,
+            updated=self.updated, author=self.author, summary=self.summary,
+            content=self.content)
+        await insert.commit()
+
+    async def series_title(self):
+        series_title = self.title.rsplit('#', 1)[0].strip()
+        return await self.bot.series.match_series(series_title)[0]
+
+    @property
+    def chapter(self):
+        try:
+            chapter = self.title.rsplit('#', 1)[1].strip()
+        except IndexError:
+            split = urllib.parse.urlsplit(self.item_id)
+            chapter = split.path.rsplit('/', 1)[-1]
+        return chapter
+
+    async def update_series(self):
+        try:
+            # get series title
+            series_title = await self.series_title()
+            if not series_title:
+                return
+
+            # make this entry latest details for series
+            await self.bot.series.edit_by_title(
+                series_title,
+                lastest_chapter=self.chapter,
+                updated=self.updated)
+
+        except Exception as e:
+            logger.error(f'Exception {type(e)}: {e}')
+
+    async def first_page(self):
+        try:
+            async with self.bot.session.get(self.item_id) as r:
+                if r.status != 200:
+                    return False
+                content = await r.text()
+                soup = bs4.BeautifulSoup(content, 'html.parser')
+                allimgs = soup.find("div", {"id": "all"})
+                if not allimgs:
+                    return False
+                firstimg = allimgs.find("img")
+                if not firstimg:
+                    return False
+                return firstimg['data-src']
+        except aiohttp.ClientError as e:
+            logger.error(
+                f"Error Getting First Page "
+                f"({type(e)}) - Exception: {e}")
+            return None
+
+    @property
+    def poster_url(self):
+        split = urllib.parse.urlsplit(self.item_id)
+        join = 'http://hatigarmscans.net/uploads' + split.path
+        imgurl = join.rsplit('/', 1)[0] + '/cover/cover_250x350.jpg'
+        return imgurl
+
+    async def embed_data(self):
+        preview = await self.first_page()
+
+        data = {
+            "color"      : 2272250,
+            "timestamp"  : self.updated,
+            "footer"     :{
+                "text"   : "Updated"
+            },
+            "thumbnail"  :{
+                "url"    : preview
+            },
+            "author"     :{
+                "name"   : unescape_html(self.title),
+                "url"    : self.item_id
+            }
+        }
+
+        if not self.summary:
+            summary = '\u200b'
+
+        else:
+            summary = f"*{unescape_html(self.summary)}*\n"
+        data['description'] = (f"{summary}\n\U0001f4d6 "
+                               f"[Read it at Hatigarm Scans!]({self.item_id})")
+        return data
+
+    async def embed(self):
+        return Embed.from_data(await self.embed_data)
+
+    async def get_role(self, guild_id):
+        return self.bot.series.get_series_role(guild_id, self.series_title)
+
+    async def get_mention(self, guild_id):
+        role = await self.get_role(guild_id)
+        return role.mention if role else f"@{self.series_title} (New?)"
+
+    async def send_to_webhook(self, webhook, do_ping=True):
+        if do_ping:
+            series_ping = await self.get_mention(webhook.guild_id)
+            pings = f"<@&{webhook.sub_role_id}> {series_ping}"
+        else:
+            pings = ""
+        embed = await self.embed_data()
+        await webhook.webhook.send(pings, embed=embed)
+
+    async def send_to_channel(self, channel):
+        embed = await self.embed()
+        await channel.send(embed=embed)
+
+
 class RSS(Cog):
     def __init__(self, bot):
+        self.bot = bot
         self.test_webhook_url = (
             'https://discordapp.com/api/webhooks/465376012297961492/'
             'mTV37gjkuZ1C8kbLGVfMJkvs694TuIInB3gSIEZkyutL5IaJ'
@@ -48,70 +207,54 @@ class RSS(Cog):
 
     def stop_updates(self):
         if not self.update_task:
+            logger.info(f'Feed Monitor Task Not Running')
             return False
         self.update_task.cancel()
         self.update_task = None
+        logger.info(f'Feed Monitor Task Stopped')
         return True
 
     def start_updates(self):
-
-        logger.info(f'Running start_updates()')
-
         if self.update_task:
-            logger.info(f'Update task not created - Already running')
+            logger.info(f'Feed Monitor Task Already Running')
             return False
-        logger.info(f'Start Update Task')
-        self.update_task = self.bot.loop.create_task(self.update_data())
+
+        logger.info(f'Starting Feed Monitor Task')
+        self.update_task = self.bot.loop.create_task(self.monitor_feed())
         return True
 
-    async def update_data(self, guild=None, limit=None):
+    async def monitor_feed(self):
+        """Checks the feed data for new entries"""
 
-        task_params = f'guild={guild}, limit={limit}' if guild else ''
-        logger.info(
-            f'Update Task Starting: {task_params}')
-
+        # loop the feed checks
         while True:
-            if not guild:
-                await asyncio.sleep(30)
-            rawdata = await self.get_feed()
-            if not rawdata:
+            logger.info(f'Update Starting')
 
-                if guild:
-                    logger.warning(
-                        'Update Task Ended: No data received from RSS Feed')
-                    return False
-
-                logger.warning(
-                    'Update Task: No data received from RSS Feed '
-                    '- Retry in 30s')
+            # get the feed data and stop if nothing received
+            feed_text = await self.get_feed()
+            if not feed_text:
+                logger.warning('  No Feed Data')
                 continue
 
-            logger.info(f'Update Task: Parsing Feed Data')
-            self.data = feedparser.parse(rawdata)
+            # parse feed to easily separate feed entries and stop if no entries
+            logger.info(f'  Parsing Feed Data')
+            entries = feedparser.parse(feed_text).entries
+            if not entries:
+                logger.error(' No Entries Found')
+                continue
 
-            if not self.last_item_id and not guild:
-                logger.info(f'Update Task: Getting Last Item ID from DB')
-                self.last_item_id = await self.get_last_item()
+            # get reversed new entries, converted to RSSEntry objects
+            new_entries = self.get_new_entries(entries)
+            if not new_entries:
+                logger.info('  No New Entries')
 
-            if self.is_updated or guild:
-                logger.info(f'Update Task: Update Data Received')
-                if not guild:
-                    logger.info(f'Update Task: Updating Feed DB')
-                    await self.update_feed_db()
-                logger.info(
-                    f'Update Task: Sending to Webhooks - {task_params}')
-                await self.send_to_webhooks(guild, limit)
-            else:
-                logger.info(f'Update Task: No Update Found: {task_params}')
+            # update each entries series data in the background
+            self.bot.loop.create_task(self.update_entries_series(new_entries))
 
-            if guild:
-                logger.info(
-                    f'Update Task Ended: {task_params}')
-                break
+            await self.send_to_webhooks(entries)
 
-            logger.info(
-                f'Update Task Sleeping: {task_params}')
-            await asyncio.sleep(30)
+            logger.info(f'Update Task Complete - Sleeping Until Next Update')
+            await asyncio.sleep(120)
             continue
 
     async def get_feed(self):
@@ -125,169 +268,61 @@ class RSS(Cog):
             logger.error(f'Feed Error ({type(e)}) - Exception: {e}')
             return None
 
-    async def get_last_item(self):
-        query = self.feed_table.query.order_by('updated', asc=False).limit(1)
-        last_item = await query.get_value('item_id')
-        self.last_item_id = last_item
-        return last_item
+    async def get_new_entries(self, entries):
+        new_entries = []
 
-    async def update_series(self, item):
-        timestamp = datetime.datetime.strptime(
-            item.updated.rsplit('+', 1)[0], "%Y-%m-%dT%H:%M:%S")
-        try:
-            series_title = item.title.rsplit('#', 1)[0].strip()
-            match, __ = await self.bot.series.match_series(series_title)
-            if match:
-                split = urllib.parse.urlsplit(item.id)
-                chapter = split.path.rsplit('/', 1)[-1]
-                await self.bot.series.edit_series(
-                    title=match,
-                    lastest_chapter=chapter,
-                    updated=timestamp)
-        except Exception as e:
-            logger.error(f'Exception {type(e)}: {e}')
-
-    async def update_feed_db(self):
-        feed_insert = self.feed_table.insert
-        last_item = self.last_item_id
-        for item in self.data.entries:
-            if item.id == last_item:
+        for entry in entries:
+            # cast to entry object
+            entry = RSSEntry(self.bot, entry)
+            # stop going through entries if one found to already exist
+            if await entry.exists():
                 break
-            timestamp = datetime.datetime.strptime(
-                item.updated.rsplit('+', 1)[0], "%Y-%m-%dT%H:%M:%S")
-            await self.update_series(item)
-            feed_insert(
-                item_id=item.id, title=item.title, link=item.link,
-                updated=timestamp, author=item.author,
-                summary=str(item.summary), content=str(item.content)
-            )
-        await feed_insert.commit(do_update=False)
+            # insert the new entry into the db
+            await entry.insert()
+            # add to new entries
+            new_entries.append(entry)
 
-    async def send_to_webhooks(self, guild=None, limit=None):
-        task_params = f'guild={guild}, limit={limit}' if guild else ''
-        logger.info(f'Send To Webhooks: Starting - {task_params}')
+        # return new entries from oldest to newest
+        return list(reversed(new_entries))
 
-        logger.info(f'Send To Webhooks: Getting New Items (limit={limit})')
-        new_items = self.new_items(limit)
-        if not new_items:
-            logger.warning(f'Send To Webhooks Ended: No New Items')
-            return
+    async def update_entries_series(self, entries):
+        for entry in entries:
+            await entry.update_series()
 
-        logger.info(f'Send To Webhooks: Building Embeds')
-        embeds = self.build_embeds(new_items)
-        logger.info(f'Send To Webhooks: Split Updates into Chunks')
-        msgs = split_list(embeds, 10)
-
-        if not guild:
-            logger.info(f'Send To Webhooks: Update last_item attribute.')
-            await self.get_last_item()
-
-        logger.info(f'Send To Webhooks: Start looping webhooks.')
-
-        titles = [i.title.rsplit('#', 1)[0].strip() for i in new_items]
-        urls = [i.id for i in new_items]
-
-        for wh_data in await self.all_webhooks():
-            guild_id = wh_data['guild_id']
-
-            if guild and guild_id != guild:
-                logger.info(
-                    f"Send To Webhooks: guild={guild} - "
-                    f"{guild_id} doesn't match.")
-                continue
-
-            if not guild and not wh_data['enabled']:
-                logger.info(
-                    f"Send To Webhooks: Updates are disabled for guild"
-                    f"{guild_id}, skipping")
-                continue
-
-            webhook = wh_data['webhook']
-            avatar = wh_data['avatar'] or self.avatar
-            delay = wh_data['delay'] or 0
-            do_ping = wh_data['ping']
-
-            series_roles = []
-            if not do_ping:
-                global_role = None
-                series_roles = None
-            else:
-                global_role = wh_data['sub_role_id']
-                series_roles = await self.bot.series.get_series_roles(
-                    guild_id, titles)
-
-            logger.info(
-                f"Send To Webhooks: Sending Notification for guild "
-                f"{guild_id} - {webhook.url}, limit={limit}")
-
-            self.bot.loop.create_task(
-                self.notify(
-                    webhook, global_role, series_roles,
-                    avatar, delay, msgs, urls))
+    async def send_to_webhooks(self, entries):
+        webhooks = await self.all_webhooks()
+        logger.info(f"Sending to {len(webhooks)} Webhooks")
+        await asyncio.gather(*[self.notify(wh, entries) for wh in webhooks])
 
     async def all_webhooks(self):
-        query = self.settings_table.query
-        records = await query.get()
+        records = await self.settings_table.query.get()
         data = []
         for record in records:
-            rcrd_data = dict(record)
-            rcrd_data['webhook'] = Webhook.from_url(
-                rcrd_data['webhook_url'],
+            record = Map(dict(record))
+            if not record.webhook_url or not record.enabled:
+                return
+
+            record.webhook = Webhook.from_url(
+                record.webhook_url,
                 adapter=AsyncWebhookAdapter(self.bot.session))
-            data.append(rcrd_data)
+
+            data.append(record)
         return data
 
-    async def notify(
-            self, wh, global_role, series_roles, avatar, delay, msgs, urls):
+    @property
+    def settings_table(self):
+        return self.bot.dbi.table('feed_settings')
 
+    async def notify(self, webhook, entries):
         logger.info(
-            f"Notify Webhook ({wh.url}): "
-            f"global_role={global_role}, delay={delay}, avatar={avatar}")
+            f"{len(entries)} New Webhook Notifications:\n"
+            f"  GuildID: {webhook.guild_id}"
+            f"  Delaying for {webhook.delay}s")
 
-        logger.info(
-            f"Notify Webhook ({wh.url}): "
-            f"Delaying for {delay} seconds")
+        await asyncio.sleep(webhook.delay)
 
-        await asyncio.sleep(delay)
-
-        logger.info(f"Notify Webhook ({wh.url}): Check Chapters")
-
-        while True:
-            failed = []
-            for url in urls:
-                logger.info(f"Notify Webhook ({wh.url}): Checking {url}.")
-                result = await self.get_first_page(url)
-                if result:
-                    logger.info(f"Notify Webhook ({wh.url}): {url} OK.")
-                else:
-                    failed.append(url)
-                    logger.info(f"Notify Webhook ({wh.url}): {url} NOT READY.")
-            if failed:
-                logger.info(
-                    f"Notify Webhook ({wh.url}): "
-                    f"{len(failed)} failed. "
-                    "Waiting for 15 seconds and checking again.")
-                urls = failed
-                await asyncio.sleep(15)
-            else:
-                break
-
-        logger.info(
-            f"Notify Webhook ({wh.url}): "
-            f"Sending {len(msgs)} messages")
-
-        for embeds in msgs:
-            if embeds == msgs[0]:
-                pings = f'<@&{global_role}> ' if global_role else None
-                pings += ' '.join(set(series_roles))
-            else:
-                pings = None
-            await wh.send(
-                pings, embeds=embeds, username='New Update!', avatar_url=avatar)
-            await asyncio.sleep(0.5)
-
-        logger.info(
-            f"Notify Webhook ({wh.url}): Complete")
+        for entry in entries:
+            await entry.send_to_webhook(webhook)
 
     async def test_chapter(self, url):
         if url.endswith('/'):
@@ -334,62 +369,12 @@ class RSS(Cog):
     def feed_table(self):
         return self.bot.dbi.table('feed_data')
 
-    @property
-    def settings_table(self):
-        return self.bot.dbi.table('feed_settings')
-
     async def settings(self, guild_id, field=None):
         query = self.settings_table.query.where(guild_id=guild_id)
         if not field:
             return await query.get_one()
         else:
             return await query.get_value(field)
-
-    def new_items(self, limit=None):
-        new_items = []
-        for item in self.data.entries:
-            if limit and item == self.data.entries[limit]:
-                break
-            if not limit and item.id == self.last_item_id:
-                break
-            new_items.append(item)
-        if new_items:
-            logger.info(f'New Items found:\n{new_items}')
-        return list(reversed(new_items))
-
-    def build_embeds(self, items):
-        embeds = []
-        for item in items:
-            embed_data = self.build_embed(item.title, item.id, item.updated, item.summary)
-            embeds.append(Embed.from_data(embed_data))
-        return embeds
-
-    def build_embed(self, name, page_url, timestamp, summary):
-        if isinstance(timestamp, datetime.datetime):
-            timestamp = timestamp.strftime("%Y-%m-%dT%H:%M:%S")
-        else:
-            timestamp = timestamp.split('+')[0]
-        poster_url = get_poster_url(page_url)
-        data = {
-            "color"      : 2272250,
-            "timestamp"  : timestamp,
-            "footer"     :{
-                "text"   : "Updated"
-            },
-            "thumbnail"  :{
-                "url"    : poster_url
-            },
-            "author"     :{
-                "name"   : unescape_html(name),
-                "url"    : page_url
-            }
-        }
-        if not summary:
-            summary = '\u200b'
-        else:
-            summary = f"*{unescape_html(summary)}*\n"
-        data['description'] = f'{summary}\n\U0001f4d6 [Read it at Hatigarm Scans!]({page_url})'
-        return data
 
     @group(name='rss', invoke_without_command=True)
     async def _rss(self, ctx, guild_id: int = None):
@@ -439,31 +424,29 @@ class RSS(Cog):
             await ctx.info(
                 f'RSS | {guild.name}', '\n'.join(status_entries))
 
-    @_rss.command(name='update_series')
-    @checks.is_co_owner()
-    async def _update_series(self, ctx):
-        titles = await ctx.bot.series.series_titles()
-        table = self.feed_table
-        for title in titles:
-            if title:
-                table.query.where(table['title'].ilike(f'%{title}%'))
-            table.query.order_by('updated', asc=False)
-            result = await table.query.get_first()
-
-            if not result:
-                continue
-
-            await self.update_series(result)
-            embed_data = self.build_embed(
-                result['title'], result['item_id'], result['updated'], result['summary'])
-            embed = discord.Embed.from_data(embed_data)
-            await ctx.send(embed=embed)
-
     @_rss.command()
     @checks.is_admin()
-    async def resend(self, ctx, number: int = 1):
+    async def resend(self, ctx, number: int = 1, ping: bool = False):
         """Resend the last number of releases to this guilds webhook."""
-        await self.update_data(ctx.guild.id, limit=number)
+        # get guild settings
+        record = await self.settings(ctx.guild.id)
+        record = Map(dict(record))
+
+        # check if webhook registered
+        if not record.webhook_url:
+            return await ctx.error('No webhook registered.')
+
+        # build actual webhook object from url
+        record.webhook = Webhook.from_url(
+            record.webhook_url, adapter=AsyncWebhookAdapter(self.bot.session))
+
+        # get last x number of rss entries from database
+        query = self.feed_table.query.order_by('updated', asc=False)
+        results = await query.limit(number).get()
+        entries = [RSSEntry(self.bot, Map(dict(r))) for r in results]
+
+        for entry in entries:
+            await entry.send_to_webhook(record)
         await ctx.ok()
 
     @_rss.command()
@@ -522,7 +505,7 @@ class RSS(Cog):
 
     @_rss.command()
     @checks.is_admin()
-    async def register(self, ctx, webhook_url):
+    async def register(self, ctx, webhook_url=None):
         """Register the guild rss webhook."""
         insert = self.settings_table.insert(
             guild_id=ctx.guild.id, webhook_url=webhook_url, enabled=True)
@@ -758,7 +741,7 @@ class RSS(Cog):
 
         if not result:
             return await ctx.error("Sorry, I couldn't find a match.")
-        embed_data = self.build_embed(
-            result['title'], result['item_id'], result['updated'], result['summary'])
-        embed = discord.Embed.from_data(embed_data)
-        await ctx.send(embed=embed)
+
+        entry = RSSEntry(self.bot, Map(dict(result)))
+
+        await entry.send_to_channel(ctx.channel)
