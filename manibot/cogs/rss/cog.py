@@ -247,7 +247,7 @@ class RSS(Cog):
                 continue
 
             # get reversed new entries, converted to RSSEntry objects
-            new_entries = self.get_new_entries(entries)
+            new_entries = await self.get_new_entries(entries)
             if not new_entries:
                 logger.info('  No New Entries')
 
