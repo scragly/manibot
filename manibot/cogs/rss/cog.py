@@ -62,7 +62,8 @@ class RSSEntry:
         return self.data_table.query.where(item_id=self.item_id)
 
     async def exists(self):
-        return bool(await self.query.get_value('item_id'))
+        value = await self.query.get_value('item_id')
+        return bool(value)
 
     async def get(self):
         return await self.query.get()
@@ -158,7 +159,8 @@ class RSSEntry:
         return data
 
     async def embed(self):
-        return Embed.from_data(await self.embed_data)
+        embed_data = await self.embed_data
+        return Embed.from_data(embed_data)
 
     async def get_role(self, guild_id):
         return self.bot.series.get_series_role(guild_id, self.series_title)
