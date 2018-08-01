@@ -306,7 +306,7 @@ class RSS(Cog):
         for record in records:
             record = Map(dict(record))
             if not record.webhook_url or not record.enabled:
-                return
+                continue
 
             record.webhook = Webhook.from_url(
                 record.webhook_url,
