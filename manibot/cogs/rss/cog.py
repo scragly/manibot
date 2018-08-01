@@ -257,7 +257,7 @@ class RSS(Cog):
             # update each entries series data in the background
             self.bot.loop.create_task(self.update_entries_series(new_entries))
 
-            await self.send_to_webhooks(entries)
+            await self.send_to_webhooks(new_entries)
 
             logger.info(f'Update Task Complete - Sleeping Until Next Update')
             await asyncio.sleep(120)
