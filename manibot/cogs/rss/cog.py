@@ -159,7 +159,7 @@ class RSSEntry:
         return data
 
     async def embed(self):
-        embed_data = await self.embed_data
+        embed_data = await self.embed_data()
         return Embed.from_data(embed_data)
 
     async def get_role(self, guild_id):
