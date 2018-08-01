@@ -98,7 +98,7 @@ class RSSEntry:
             # make this entry latest details for series
             await self.bot.series.edit_by_title(
                 series_title,
-                lastest_chapter=self.chapter,
+                latest_chapter=self.chapter,
                 updated=self.updated)
 
         except Exception as e:
