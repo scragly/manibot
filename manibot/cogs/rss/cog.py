@@ -233,7 +233,7 @@ class RSS(Cog):
         self.last_item_id = None
         self.update_task = None
         self.avatar = 'https://i.imgur.com/HZ27mE7.png'
-        # self.start_updates()
+        self.start_updates()
 
     def __unload(self):
         self.stop_updates()
