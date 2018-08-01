@@ -253,7 +253,9 @@ class RSS(Cog):
             logger.info(f'  Getting New Entries')
             new_entries = await self.get_new_entries(entries)
             if not new_entries:
-                logger.info('  No New Entries')
+                logger.info(f'No New Entries - Sleeping Until Next Update')
+                await asyncio.sleep(120)
+                continue
 
             # update each entries series data in the background
             self.bot.loop.create_task(self.update_entries_series(new_entries))
