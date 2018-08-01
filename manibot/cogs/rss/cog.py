@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import logging
 import urllib
+import traceback
 
 import aiohttp
 import bs4
@@ -733,6 +734,8 @@ class RSS(Cog):
             if self.update_task._exception is not None:
                 msg += '\n\nException:\n{!r}'.format(
                     self.update_task._exception)
+                traceback.print_tb(
+                    self.update_task._exception.__traceback__)
         await ctx.codeblock(msg)
 
     @command()
