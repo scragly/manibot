@@ -175,8 +175,9 @@ class RSSEntry:
 
     async def send_to_webhook(self, webhook, do_ping=True):
         if do_ping:
-            series_ping = await self.get_mention(webhook.guild_id)
-            pings = f"<@&{webhook.sub_role_id}> {series_ping}"
+            pings = await self.get_mention(webhook.guild_id)
+            if webhook.sub_role_id:
+                pings = f"<@&{webhook.sub_role_id}> {pings}"
         else:
             pings = ""
 
