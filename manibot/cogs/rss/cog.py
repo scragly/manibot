@@ -265,6 +265,9 @@ class RSS(Cog):
     async def monitor_feed(self):
         """Checks the feed data for new entries"""
 
+        # wait until bot is actually finished starting up
+        await self.bot.wait_until_ready()
+
         # loop the feed checks
         while True:
             logger.info(f'Update Starting')
