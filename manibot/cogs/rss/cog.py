@@ -179,7 +179,8 @@ class RSSEntry:
             pings = f"<@&{webhook.sub_role_id}> {series_ping}"
         else:
             pings = ""
-        await webhook.webhook.send(pings, embed=self.embed)
+        await webhook.webhook.send(
+            pings, embed=self.embed, avatar_url=webhook.avatar)
 
     async def send_to_channel(self, channel):
         await channel.send(embed=self.embed)
@@ -307,6 +308,9 @@ class RSS(Cog):
             record = Map(dict(record))
             if not record.webhook_url or not record.enabled:
                 continue
+
+            if not record.avatar:
+                record.avatar = self.avatar
 
             record.webhook = Webhook.from_url(
                 record.webhook_url,
@@ -441,6 +445,9 @@ class RSS(Cog):
         # check if webhook registered
         if not record.webhook_url:
             return await ctx.error('No webhook registered.')
+
+        if not record.avatar:
+            record.avatar = self.avatar
 
         # build actual webhook object from url
         record.webhook = Webhook.from_url(
