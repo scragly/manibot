@@ -194,6 +194,7 @@ class RSSEntry:
         while True:
             page = await self.get_first_page()
             if page:
+                logger.info(f'Published: {page}')
                 return
             logger.info(
                 f"Check Published FAIL (retry in 30s) - {self.item_id}")
@@ -203,8 +204,6 @@ class RSSEntry:
     async def get_first_page(self):
         try:
             async with self.bot.session.get(self.item_id) as r:
-                print(r.url)
-                print(r.status)
                 if r.status != 200:
                     return False
                 content = await r.text()
