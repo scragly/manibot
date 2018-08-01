@@ -179,11 +179,46 @@ class RSSEntry:
             pings = f"<@&{webhook.sub_role_id}> {series_ping}"
         else:
             pings = ""
+
+        await self.wait_until_published()
+
+        logger.info(f"Pushing Update - {self.item_id}")
         await webhook.webhook.send(
             pings, embed=self.embed, avatar_url=webhook.avatar)
 
     async def send_to_channel(self, channel):
         await channel.send(embed=self.embed)
+
+    async def wait_until_published(self):
+        logger.info(f"Check Published - {self.item_id}")
+        while True:
+            page = await self.get_first_page()
+            if page:
+                return
+            logger.info(
+                f"Check Published FAIL (retry in 30s) - {self.item_id}")
+            await asyncio.sleep(30)
+            continue
+
+    async def get_first_page(self):
+        try:
+            async with self.bot.session.get(self.item_id) as r:
+                print(r.url)
+                print(r.status)
+                if r.status != 200:
+                    return False
+                content = await r.text()
+                soup = bs4.BeautifulSoup(content, 'html.parser')
+                allimgs = soup.find("div", {"id": "all"})
+                if not allimgs:
+                    return False
+                firstimg = allimgs.find("img")
+                if not firstimg:
+                    return False
+                return firstimg['data-src']
+        except aiohttp.ClientError as e:
+            logger.error(f'{type(e)} - Exception: {e}')
+            return None
 
 
 class RSS(Cog):
