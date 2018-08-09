@@ -173,7 +173,10 @@ class RSSEntry:
 
     async def get_mention(self, guild_id):
         role = await self.get_role(guild_id)
-        return role.mention if role else f"@{self.series_title} (New?)"
+        if role:
+            return role.mention
+        title = self.title.rsplit('#', 1)[0].strip()
+        return f"@{title} (New?)"
 
     async def send_to_webhook(self, webhook, do_ping=True):
         if do_ping:
