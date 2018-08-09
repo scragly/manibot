@@ -166,8 +166,10 @@ class RSSEntry:
 
     async def get_role(self, guild_id):
         series_title = await self.series_title()
-        return await self.bot.series.get_series_role(
-            guild_id, series_title)
+        if series_title:
+            return await self.bot.series.get_series_role(
+                guild_id, series_title)
+        return None
 
     async def get_mention(self, guild_id):
         role = await self.get_role(guild_id)
