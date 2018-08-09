@@ -259,8 +259,36 @@ class Series(Cog):
 
     @series.command()
     @checks.is_admin()
-    async def autoadd(self, ctx, link, status=None, priority=None):
-        return
+    async def autoadd(self, ctx, link):
+        await ctx.trigger_typing()
+        async with self.bot.session.get(link) as r:
+            if r.status != 200:
+                return await ctx.error('The given link was invalid')
+            content = await r.text()
+            soup = bs4.BeautifulSoup(content, 'html.parser')
+
+        title = soup.find_all('h2', class_='widget-title')[0].get_text()
+        table_values = soup.find_all('dd')
+        table_titles = soup.find_all('dt')
+        table = dict(zip([t.get_text(strip=True) for t in table_titles], table_values))
+
+        info = {}
+
+        for k, v in table.items():
+            if k in ['Categories', 'Tags']:
+                v = [i.string for i in v if '\n' not in i.string]
+                info[k] = v
+            else:
+                info[k] = v.get_text(strip=True)
+
+        chapter_data = soup.find_all('h5', class_='chapter-title-rtl')
+        chapters = [(i.a.get_text(), i.a['href']) for i in chapter_data]
+        latest_chapter = f"[{chapters[0][0]}]({chapters[0][1]})"
+        chapter_count = len(chapters)
+
+        import json
+        await ctx.embed(title, f"{chapter_count} Chapters\nLatest: {latest_chapter}\n\n" + json.dumps(info, indent=True))
+
 
     @series.command()
     @checks.is_admin()
