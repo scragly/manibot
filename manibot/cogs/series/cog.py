@@ -44,9 +44,10 @@ class Series(Cog):
     def series_table(self):
         return self.bot.dbi.table('series')
 
-    async def add_series(self, title, link, status, priority):
+    async def add_series(self, title, link, status, priority, shortname):
         insert = self.series_table.insert(
-            title=title, link=link, status=status, priority=priority)
+            title=title, link=link, status=status,
+            priority=priority, shortname=shortname)
         await insert.commit()
 
     async def edit_by_title(self, existing, new=None, **changes):
@@ -336,10 +337,21 @@ class Series(Cog):
 
             priority = priority_rsp.clean_content
 
+        await ctx.info(f"What's the short name for {title}?")
+
+        try:
+            shortname_rsp = await self.bot.wait_for(
+                'message', timeout=60.0, check=msg_check)
+        except asyncio.TimeoutError:
+            return await ctx.error('You took too long, try again later')
+
+        shortname = shortname_rsp.clean_content
+
         confirm_msg = await ctx.embed(
             f"Thanks! Does this look right?",
             (f"**{title}**\n"
              f"[Series Link]({link})\n"
+             f"Shortname: {shortname}\n"
              f"Status: {status}\n"
              f"Priority: {priority}"),
             thumbnail=get_poster_url(link))
@@ -367,7 +379,7 @@ class Series(Cog):
         if confirmation.emoji == '\u274e':
             return await ctx.error('Cancelled')
 
-        await self.add_series(title, link, status, priority)
+        await self.add_series(title, link, status, priority, shortname)
         await ctx.success(
             f"Added {title}",
             ("Consider adding extra details with:"
