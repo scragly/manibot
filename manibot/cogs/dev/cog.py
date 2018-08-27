@@ -4,10 +4,12 @@ import traceback
 import os
 
 from contextlib import redirect_stdout
+from subprocess import Popen, PIPE
 
 from discord.ext import commands
 
-from manibot import checks, command
+from manibot import checks, command, group
+
 
 class Dev:
     """Developer Tools"""
@@ -102,3 +104,16 @@ class Dev:
         """Clear the console"""
         os.system('cls')
         await ctx.ok()
+
+    @group()
+    @checks.is_owner()
+    async def git(self, ctx):
+        ctx.git_path = os.path.dirname(ctx.bot.bot_dir)
+        ctx.git_cmd = ['git']
+
+    @git.command()
+    async def pull(self, ctx):
+        ctx.git_cmd.append('pull')
+
+        p = Popen(ctx.git_cmd, stdout=PIPE, cwd=ctx.git_path)
+        await ctx.codeblock(p.stdout.read().decode("utf-8"), syntax="")
