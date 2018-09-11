@@ -30,7 +30,7 @@ setup(
         'fuzzywuzzy',
         'psutil',
         'aiocontextvars',
-        'colorthief'
+        'colorthief',
         'more_itertools',
         'bs4',
         'feedparser',
