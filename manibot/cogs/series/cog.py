@@ -553,7 +553,7 @@ class Series(Cog):
 
             field = choices[response]
 
-            is_type = field != 'type'
+            is_type = field == 'type'
 
             embed = await ctx.info(f"What's the new {field}?", send=is_type)
 
