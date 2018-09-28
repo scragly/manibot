@@ -543,7 +543,7 @@ class Series(Cog):
 
             options = list(choices)
             options.append('false')
-            response = await ctx.ask(embed, options=options)
+            response = await ctx.ask(embed, options=options, autodelete=True)
 
             if response is None:
                 return await ctx.error('You took too long, try again later')
@@ -555,8 +555,7 @@ class Series(Cog):
 
             is_type = field == 'type'
 
-            embed = await ctx.info(
-                f"What's the new {field}?", send=not is_type)
+            msg = await ctx.info(f"What's the new {field}?")
 
             is_other = False
 
@@ -569,7 +568,17 @@ class Series(Cog):
                 }
                 options = list(type_choices)
                 options.append('false')
-                response = await ctx.ask(embed, options=options)
+
+                choices_pretty = []
+                for k, v in type_choices.items():
+                    choices_pretty.append(f"{k} - {v.title()}")
+
+                embed = await ctx.info(
+                    f"What's the new {field}?",
+                    '\n'.join(choices_pretty),
+                    send=False)
+
+                response = await ctx.ask(embed, options=options, autodelete=True)
 
                 if response is None:
                     return await ctx.error(
@@ -579,9 +588,11 @@ class Series(Cog):
                     continue
                 elif response == 4:
                     is_other = True
-                    await ctx.info(f"What's the type name?")
+                    msg = await ctx.info(f"What's the type name?")
                 else:
                     new_value = type_choices[response]
+            else:
+                msg = await ctx.info(f"What's the new {field}?")
 
             if not is_type or is_other:
                 def msg_check(m):
@@ -593,6 +604,8 @@ class Series(Cog):
                 except asyncio.TimeoutError:
                     return await ctx.error(
                         'You took too long, try again later')
+                finally:
+                    await msg.delete()
 
                 new_value = response.clean_content
 
@@ -608,7 +621,8 @@ class Series(Cog):
                 new_value_str,
                 send=False)
 
-            correct = await ctx.ask(embed, options=['true', 'false'])
+            correct = await ctx.ask(
+                embed, options=['true', 'false'], autodelete=True)
 
             if correct is None:
                 return await ctx.error('You took too long, try again later')
