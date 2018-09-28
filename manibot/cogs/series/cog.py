@@ -555,8 +555,6 @@ class Series(Cog):
 
             is_type = field == 'type'
 
-            msg = await ctx.info(f"What's the new {field}?")
-
             is_other = False
 
             if is_type:
