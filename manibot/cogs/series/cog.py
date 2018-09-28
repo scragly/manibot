@@ -582,7 +582,7 @@ class Series(Cog):
                 else:
                     new_value = type_choices[response]
 
-            if is_type or is_other:
+            if not is_type or is_other:
                 def msg_check(m):
                     return m.author == ctx.author and m.channel == ctx.channel
 
