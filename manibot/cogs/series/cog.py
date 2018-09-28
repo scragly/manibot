@@ -567,13 +567,13 @@ class Series(Cog):
                 options = list(type_choices)
                 options.append('false')
 
-                choices_pretty = []
+                type_choices_pretty = []
                 for k, v in type_choices.items():
-                    choices_pretty.append(f"{k} - {v.title()}")
+                    type_choices_pretty.append(f"{k} - {v.title()}")
 
                 embed = await ctx.info(
                     f"What's the new {field}?",
-                    '\n'.join(choices_pretty),
+                    '\n'.join(type_choices_pretty),
                     send=False)
 
                 response = await ctx.ask(embed, options=options, autodelete=True)
