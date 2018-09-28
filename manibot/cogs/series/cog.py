@@ -261,6 +261,10 @@ class Series(Cog):
     @series.command()
     @checks.is_admin()
     async def autoadd(self, ctx, link):
+        if link.startswith('<') and link.endswith('>'):
+            link = link.lstrip('<')
+            link = link.rstrip('>')
+
         await ctx.trigger_typing()
         async with self.bot.session.get(link) as r:
             if r.status != 200:
@@ -287,9 +291,93 @@ class Series(Cog):
         latest_chapter = f"[{chapters[0][0]}]({chapters[0][1]})"
         chapter_count = len(chapters)
 
-        import json
-        await ctx.embed(title, f"{chapter_count} Chapters\nLatest: {latest_chapter}\n\n" + json.dumps(info, indent=True))
+        # def msg_check(m):
+        #     return m.author == ctx.author and m.channel == ctx.channel
 
+        # def react_check(reaction, user):
+        #     if user.id != ctx.author.id:
+        #         return False
+        #     if reaction.message.id != confirm_msg.id:
+        #         return False
+        #     if reaction.emoji not in ['\u2705', '\u274e']:
+        #         return False
+        #     return True
+
+        # # series title
+
+        # await ctx.info(f"Is the title {title} correct?")
+
+        # try:
+        #     name_rsp = await self.bot.wait_for(
+        #         'message', timeout=60.0, check=msg_check)
+        # except asyncio.TimeoutError:
+        #     return await ctx.error('You took too long, try again later')
+
+        # title = name_rsp.clean_content
+
+        # if title in await self.series_titles():
+        #     return await ctx.error('Series already exists')
+
+        # if not status:
+        #     await ctx.info(f"What's the scanlation status of {title}?")
+
+        #     try:
+        #         status_rsp = await self.bot.wait_for(
+        #             'message', timeout=60.0, check=msg_check)
+        #     except asyncio.TimeoutError:
+        #         return await ctx.error('You took too long, try again later')
+
+        #     status = status_rsp.clean_content
+
+        # if not priority:
+        #     await ctx.info(f"What's the scanlation priority of {title}?")
+
+        #     try:
+        #         priority_rsp = await self.bot.wait_for(
+        #             'message', timeout=60.0, check=msg_check)
+        #     except asyncio.TimeoutError:
+        #         return await ctx.error('You took too long, try again later')
+
+        #     priority = priority_rsp.clean_content
+
+        # await ctx.info(f"What's the short name for {title}?")
+
+        # try:
+        #     shortname_rsp = await self.bot.wait_for(
+        #         'message', timeout=60.0, check=msg_check)
+        # except asyncio.TimeoutError:
+        #     return await ctx.error('You took too long, try again later')
+
+        # shortname = shortname_rsp.clean_content
+
+        # confirm_msg = await ctx.embed(
+        #     f"Thanks! Does this look right?",
+        #     (f"**{title}**\n"
+        #      f"[Series Link]({link})\n"
+        #      f"Shortname: {shortname}\n"
+        #      f"Status: {status}\n"
+        #      f"Priority: {priority}"),
+        #     thumbnail=get_poster_url(link))
+
+        # await confirm_msg.add_reaction('\u2705')
+        # await confirm_msg.add_reaction('\u274e')
+
+        # try:
+        #     confirmation, __ = await self.bot.wait_for(
+        #         'reaction_add', timeout=60.0, check=react_check)
+        # except asyncio.TimeoutError:
+        #     return await ctx.error('You took too long, try again later')
+
+        # await confirm_msg.clear_reactions()
+
+        # if confirmation.emoji == '\u274e':
+        #     return await ctx.error('Cancelled')
+
+        # await self.add_series(title, link, status, priority, shortname)
+        # await ctx.success(
+        #     f"Added {title}",
+        #     ("Consider adding extra details with:"
+        #      f"```{ctx.prefix}series edit <series>```"))
 
     @series.command()
     @checks.is_admin()
@@ -429,10 +517,13 @@ class Series(Cog):
         title = await self.check_series_input(ctx, title)
 
         choices = {
-            1 : "link",
-            2 : "status",
-            3 : "priority",
-            4 : "genres"
+            1: "link",
+            2: "title",
+            3: "shortname",
+            4: "status",
+            5: "priority",
+            6: "genres",
+            7: "type"
         }
 
         choices_pretty = []
@@ -445,7 +536,8 @@ class Series(Cog):
                 f"**Editing {title}**\n" + '\n'.join(choices_pretty),
                 send=False)
 
-            response = await ctx.ask(embed, options=[1, 2, 3, 4, 'false'])
+            response = await ctx.ask(
+                embed, options=list(choices.keys()).append('false'))
 
             if response is None:
                 return await ctx.error('You took too long, try again later')
@@ -487,7 +579,8 @@ class Series(Cog):
                 await ctx.error('Update Cancelled.')
 
             else:
-                data = {field : new_value}
+                kwarg = field if field != 'title' else 'new'
+                data = {kwarg: new_value}
 
                 await self.edit_by_title(title, **data)
                 await ctx.success(f'{field.title()} updated for {title}')
@@ -498,9 +591,7 @@ class Series(Cog):
                 embed, options=['true', 'false'], autodelete=True)
             if response is None:
                 return await ctx.error('You took too long, try again later')
-            if response is 'true':
-                continue
-            else:
+            if not response:
                 break
 
     @edit.command(name='link')
