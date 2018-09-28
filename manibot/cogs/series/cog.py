@@ -536,8 +536,9 @@ class Series(Cog):
                 f"**Editing {title}**\n" + '\n'.join(choices_pretty),
                 send=False)
 
-            response = await ctx.ask(
-                embed, options=list(choices.keys()).append('false'))
+            options = list(choices)
+            options.append('false')
+            response = await ctx.ask(embed, options=options)
 
             if response is None:
                 return await ctx.error('You took too long, try again later')
