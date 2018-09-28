@@ -8,28 +8,30 @@ import asyncpg
 
 import discord
 
-from manibot import command, group, Cog, checks
+from manibot import group, Cog, checks
 from manibot.utils.formatters import make_embed
-from manibot.utils.fuzzymatch import get_partial_match, get_match
+from manibot.utils.fuzzymatch import get_partial_match
 
 HATIGARMURL = "https://www.hatigarmscans.net/"
 
 GENRE_SEARCH_SQL = """
 SELECT * FROM series
 WHERE EXISTS (
-	SELECT *
-	FROM (SELECT UNNEST(series.genres)) x(genres)
-	WHERE x.genres ILIKE '%' || $1 || '%');
+    SELECT *
+    FROM (SELECT UNNEST(series.genres)) x(genres)
+    WHERE x.genres ILIKE '%' || $1 || '%');
 """
 
 logger = logging.getLogger('manibot.rss')
+
 
 def get_poster_url(item_url):
     if item_url.endswith('/'):
         item_url = item_url[:-1]
     split = urllib.parse.urlsplit(item_url)
-    join = 'http://hatigarmscans.net/uploads' + split.path + '/cover/cover_250x350.jpg'
-    return join
+    join = f'http://hatigarmscans.net/uploads{split.path}'
+    return f'{join}/cover/cover_250x350.jpg'
+
 
 class Series(Cog):
 
@@ -91,14 +93,15 @@ class Series(Cog):
     async def series_shortnames(self, shortname_keys=True):
         data = await self.series_table.query('shortname', 'title').get()
         if shortname_keys:
-            shortname_dict = {i['shortname']:i['title'] for i in data}
+            shortname_dict = {i['shortname']: i['title'] for i in data}
         else:
-            shortname_dict = {i['title']:i['shortname'] for i in data}
+            shortname_dict = {i['title']: i['shortname'] for i in data}
         return shortname_dict
 
     async def match_series(self, search_term):
         names = await self.series_shortnames()
-        match = [t for n, t in names.items() if n.lower() == search_term.lower()]
+        match = [
+            t for n, t in names.items() if n.lower() == search_term.lower()]
         if match:
             return (match[0], 100)
 
@@ -224,9 +227,10 @@ class Series(Cog):
         title = soup.find_all('h2', class_='widget-title')[0].get_text()
         table_values = soup.find_all('dd')
         table_titles = soup.find_all('dt')
-        table = dict(zip([t.get_text(strip=True) for t in table_titles], table_values))
+        table = dict(
+            zip([t.get_text(strip=True) for t in table_titles], table_values))
 
-        info = {'Title':title, 'URL':data['link']}
+        info = {'Title': title, 'URL': data['link']}
         for k, v in table.items():
             if k in ['Categories', 'Tags']:
                 v = [i.string for i in v if '\n' not in i.string]
@@ -275,7 +279,8 @@ class Series(Cog):
         title = soup.find_all('h2', class_='widget-title')[0].get_text()
         table_values = soup.find_all('dd')
         table_titles = soup.find_all('dt')
-        table = dict(zip([t.get_text(strip=True) for t in table_titles], table_values))
+        table = dict(
+            zip([t.get_text(strip=True) for t in table_titles], table_values))
 
         info = {}
 
@@ -547,21 +552,52 @@ class Series(Cog):
                 return await ctx.error('Edit cancelled')
 
             field = choices[response]
-            await ctx.info(f"What's the new {field}?")
 
-            def msg_check(m):
-                return m.author == ctx.author and m.channel == ctx.channel
+            is_type = field != 'type'
 
-            try:
-                response = await self.bot.wait_for(
-                    'message', timeout=60.0, check=msg_check)
-            except asyncio.TimeoutError:
-                return await ctx.error('You took too long, try again later')
+            embed = await ctx.info(f"What's the new {field}?", send=is_type)
 
-            new_value = response.clean_content
+            is_other = False
+
+            if is_type:
+                type_choices = {
+                    1: 'Manga',
+                    2: 'Manhua',
+                    3: 'Manhwa',
+                    4: 'Other'
+                }
+                options = list(type_choices)
+                options.append('false')
+                response = await ctx.ask(embed, options=options)
+
+                if response is None:
+                    return await ctx.error(
+                        'You took too long, try again later')
+                elif not response:
+                    await ctx.error('Edit cancelled')
+                    continue
+                elif response == 4:
+                    is_other = True
+                    await ctx.info(f"What's the type name?")
+                else:
+                    new_value = type_choices[response]
+
+            if is_type or is_other:
+                def msg_check(m):
+                    return m.author == ctx.author and m.channel == ctx.channel
+
+                try:
+                    response = await self.bot.wait_for(
+                        'message', timeout=60.0, check=msg_check)
+                except asyncio.TimeoutError:
+                    return await ctx.error(
+                        'You took too long, try again later')
+
+                new_value = response.clean_content
 
             if field == 'genres':
-                new_value = list(map(str.title, map(str.strip, new_value.split(','))))
+                new_value = list(
+                    map(str.title, map(str.strip, new_value.split(','))))
                 new_value_str = '\n'.join(new_value)
             else:
                 new_value_str = new_value
