@@ -37,7 +37,7 @@ class RoleColours(Cog):
             0x<hex>, #<hex>, 0x#<hex>
 
         Also accepts the following preset colours:
-            default, teal, dark_teal, gree, dark_green, blue, dark_blue,
+            default, teal, dark_teal, green, dark_green, blue, dark_blue,
             purple, dark_purple, magenta, dark_magenta, gold, dark_gold,
             orange, dark_orange, red, dark_red, lighter_grey, dark_grey,
             light_grey, darker_grey, blurple, greyple.
