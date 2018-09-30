@@ -48,5 +48,18 @@ class RoleColours(Cog):
                 colour=ctx.author.top_role.colour)
 
         role = ctx.get.role(colour_roles[ctx.guild.id][ctx.author.id])
-        await role.edit(colour=colour)
+
+        try:
+            await role.edit(colour=colour)
+        except discord.Forbidden:
+            is_hier = ctx.guild.me.top_role.position < role.position
+            if is_hier:
+                return await ctx.error(
+                    "I don't have enough permission to edit that role.",
+                    ("Your colour role is positioned higher than my top "
+                     "role.\nEither ensure my top role is positioned higher"
+                     "than it, or change the colour manually."))
+            else:
+                return await ctx.error(
+                    "I don't have enough permission to edit that role.")
         await ctx.success(f"{role.name} role changed to colour: {colour}")
