@@ -57,7 +57,7 @@ class RoleColours(Cog):
                 return await ctx.error(
                     "I don't have enough permission to edit that role.",
                     ("Your colour role is positioned higher than my top "
-                     "role.\nEither ensure my top role is positioned higher"
+                     "role.\nEither ensure my top role is positioned higher "
                      "than it, or change the colour manually."))
             else:
                 return await ctx.error(
