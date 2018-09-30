@@ -1,10 +1,10 @@
 import io
+import os
 import textwrap
 import traceback
-import os
-
 from contextlib import redirect_stdout
-from subprocess import Popen, PIPE
+from datetime import datetime
+from subprocess import PIPE, Popen
 
 from discord.ext import commands
 
@@ -117,3 +117,22 @@ class Dev:
 
         p = Popen(ctx.git_cmd, stdout=PIPE, cwd=ctx.git_path)
         await ctx.codeblock(p.stdout.read().decode("utf-8"), syntax="")
+
+    @command(aliases=['exc'])
+    async def last_exception(self, ctx, count=1):
+        table = ctx.bot.dbi.table('bot_logs')
+        query = table.query.order_by('created', asc=False)
+        query.where(level_name='ERROR').limit(count)
+        results = await query.get()
+        output = []
+        for rcrd in results:
+            details = []
+            if rcrd['module'] != '<string>':
+                details.append(f"Module: {rcrd['module']}")
+            details.append(f"Function: {rcrd['func_name']}")
+            details.append(datetime.utcfromtimestamp(
+                rcrd['created']).strftime('%Y-%m-%d %H:%M:%S'))
+            output.append(" | ".join(details))
+            output.append(rcrd['traceback'])
+            output.append('-'*40)
+        await ctx.codeblock('\n'.join(output))
