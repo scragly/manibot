@@ -47,6 +47,6 @@ class RoleColours(Cog):
                 ctx.author.top_role.colour,
                 colour=ctx.author.top_role.colour)
 
-        role = ctx.get.role(colour_roles[ctx.author.id])
+        role = ctx.get.role(colour_roles[ctx.guild.id][ctx.author.id])
         await role.edit(colour=colour)
         await ctx.success(f"{role.name} role changed to colour: {colour}")
