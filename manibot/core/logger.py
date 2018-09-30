@@ -1,11 +1,11 @@
 import asyncio
+import json
+import logging
 import os
 import sys
-import json
 import time
+import traceback
 from datetime import timezone
-import logging
-from logging import handlers
 
 import asyncpg
 import discord
@@ -17,6 +17,7 @@ get_id = snowflake.create()
 LOGGERS = ('bot_logs', 'discord_logs')
 
 module_logger = logging.getLogger('manibot.core.logger')
+
 
 def init_logger(bot, debug_flag=False):
 
@@ -38,14 +39,14 @@ def init_logger(bot, debug_flag=False):
     # file handler factory
     def create_fh(file_name):
         fh_path = os.path.join(log_path, file_name)
-        return handlers.RotatingFileHandler(
+        return logging.handlers.RotatingFileHandler(
             filename=fh_path, encoding='utf-8', mode='a',
             maxBytes=400000, backupCount=20)
 
     # set bot log formatting
     log_format = logging.Formatter(
-        '%(asctime)s %(name)s %(levelname)s %(module)s %(funcName)s %(lineno)d: '
-        '%(message)s',
+        '%(asctime)s %(name)s %(levelname)s %(module)s %(funcName)s '
+        '%(lineno)d: %(message)s',
         datefmt="[%d/%m/%Y %H:%M]")
 
     # create file handlers
@@ -80,6 +81,7 @@ def init_logger(bot, debug_flag=False):
 
     return bot_log
 
+
 class DBLogHandler(logging.Handler):
     def __init__(self, bot, log_name: str, level=logging.INFO):
         if log_name not in LOGGERS:
@@ -103,13 +105,15 @@ class DBLogHandler(logging.Handler):
                     func_name=str(record.funcName),
                     line_no=record.lineno,
                     message=str(record.message),
-                    traceback=str(record.exc_info))
+                    traceback=''.join(
+                        traceback.format_exception(*record.exc_info)))
         try:
             table = self.bot.dbi.table(self.log_name)
             table.insert(**data)
             await table.insert.commit()
         except asyncpg.PostgresError as e:
             self.logger.exception(type(e).__name__, exc_info=e)
+
 
 class ActivityLogging:
     def __init__(self, bot):
