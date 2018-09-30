@@ -1,11 +1,13 @@
 import asyncio
 import json
-import logging
 import os
 import sys
 import time
 import traceback
 from datetime import timezone
+
+import logging
+from logging import handlers
 
 import asyncpg
 import discord
@@ -39,7 +41,7 @@ def init_logger(bot, debug_flag=False):
     # file handler factory
     def create_fh(file_name):
         fh_path = os.path.join(log_path, file_name)
-        return logging.handlers.RotatingFileHandler(
+        return handlers.RotatingFileHandler(
             filename=fh_path, encoding='utf-8', mode='a',
             maxBytes=400000, backupCount=20)
 
