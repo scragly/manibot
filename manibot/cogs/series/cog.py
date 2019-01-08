@@ -812,8 +812,8 @@ class Series(Cog):
             return await ctx.error("There is no role for that series")
 
         await role.edit(mentionable=True)
-        await ctx.success(f"Role {role.name} unlocked,",
-                          "The role will be mentionable for one use
+        await ctx.success(f"Role {role.name} unlocked",
+                          "The role will be mentionable for one use"
                           "or until 2 minutes have passed.\n"
                           "Please make the mention soon to prevent other"
                           "users mentioning the role.")
