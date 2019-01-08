@@ -801,3 +801,41 @@ class Series(Cog):
         for role in roles:
             await role.edit(mentionable=False)
         await ctx.ok()
+
+    @series.command()
+    @checks.is_admin()
+    async def unlock(self, ctx, *, title):
+        title = await self.check_series_input(ctx, title)
+        role = await self.get_series_role(ctx.guild.id, title)
+
+        if not role:
+            return await ctx.error("There is no role for that series")
+
+        await role.edit(mentionable=True)
+        await ctx.success(f"Role {role.name} unlocked,",
+                          "The role will be mentionable for one use
+                          "or until 2 minutes have passed.\n"
+                          "Please make the mention soon to prevent other"
+                          "users mentioning the role.")
+
+        def mention_check(message):
+            if message.guild.id != ctx.guild.id:
+                return False
+            return role.mention in message.content
+
+        async def reset_role(timeout=False):
+            await role.edit(mentionable=False)
+            if timeout:
+                return await ctx.send("Took too long, role reset.")
+            await ctx.send("Role mention detected, role reset.")
+
+        task = ctx.bot.loop.create_task(
+            ctx.bot.wait_for('message', check=mention_check)
+        )
+
+        task.add_done_callback(reset_role)
+
+        await asyncio.sleep(120)
+
+        if not task.done():
+            await reset_role(timeout=True)
