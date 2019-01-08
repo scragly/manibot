@@ -824,7 +824,7 @@ class Series(Cog):
             return role.mention in message.content
 
         try:
-            await ctx.bot.wait_for('message', check=mention_check)
+            await ctx.bot.wait_for('message', check=mention_check, timeout=120)
         except asyncio.TimeoutError:
             await ctx.send("Took too long, role reset.")
         else:
