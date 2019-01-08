@@ -189,7 +189,7 @@ class RSSEntry:
         await self.wait_until_published()
 
         if do_ping:
-            role = self.get_role(webhook.guild_id)
+            role = await self.get_role(webhook.guild_id)
             if role:
                 logger.info(f"Changing series role to mentionable - {self.item_id}")
                 try:
