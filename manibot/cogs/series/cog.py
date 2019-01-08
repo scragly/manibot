@@ -792,3 +792,12 @@ class Series(Cog):
         genres_str = '\n'.join(textwrap.wrap(', '.join(genres), width=30))
 
         await ctx.success(f'Genres updated for {title}', genres_str)
+
+    @series.command()
+    @checks.is_co_owner()
+    async def lock_roles(self, ctx):
+        series = await self.series_titles()
+        roles = [await self.get_series_role(ctx.guild.id, title) for title in series]
+        for role in roles:
+            await role.edit(mentionable=False)
+        await ctx.ok()
