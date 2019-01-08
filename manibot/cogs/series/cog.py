@@ -823,19 +823,11 @@ class Series(Cog):
                 return False
             return role.mention in message.content
 
-        async def reset_role(timeout=False):
-            await role.edit(mentionable=False)
-            if timeout:
-                return await ctx.send("Took too long, role reset.")
+        try:
+            await ctx.bot.wait_for('message', check=mention_check)
+        except asyncio.TimeoutError:
+            await ctx.send("Took too long, role reset.")
+        else:
             await ctx.send("Role mention detected, role reset.")
-
-        task = ctx.bot.loop.create_task(
-            ctx.bot.wait_for('message', check=mention_check)
-        )
-
-        task.add_done_callback(reset_role)
-
-        await asyncio.sleep(120)
-
-        if not task.done():
-            await reset_role(timeout=True)
+        finally:
+            await role.edit(mentionable=False)
