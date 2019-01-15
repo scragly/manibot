@@ -196,12 +196,15 @@ class RSSEntry:
                     await role.edit(mentionable=True)
                 except discord.Forbidden:
                     pass
+                else:
+                    await asyncio.sleep(1)
 
         logger.info(f"Pushing Update - {self.item_id}")
         await webhook.webhook.send(
             pings, embed=self.embed, avatar_url=webhook.avatar)
 
         if do_ping and role:
+            await asyncio.sleep(1)
             logger.info(f"Reverting series role to unmentionable - {self.item_id}")
             await role.edit(mentionable=False)
 
