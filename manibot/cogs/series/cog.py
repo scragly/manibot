@@ -810,6 +810,13 @@ class Series(Cog):
     @command()
     @checks.is_admin()
     async def unlock(self, ctx, *, title=None):
+        """Unlocks a notification role for mentioning.
+
+        If you don't specify a specific title, the general notification role
+        will be unlocked instead.
+
+        The role is mentionable for a single use, or until 2 minutes have passed.
+        """
         if title:
             title = await self.check_series_input(ctx, title)
             role = await self.get_series_role(ctx.guild.id, title)
