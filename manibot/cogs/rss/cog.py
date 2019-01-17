@@ -196,7 +196,8 @@ class RSSEntry:
                 roles.append(s_role)
 
             if webhook.sub_role_id:
-                n_role = await self.get_role(webhook.guild_id)
+                guild = self.bot.get_guild(webhook.guild_id)
+                n_role = discord.utils.get(guild.roles, id=webhook.sub_role_id)
                 if n_role:
                     roles.append(n_role)
 
