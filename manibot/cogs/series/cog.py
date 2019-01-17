@@ -8,7 +8,7 @@ import asyncpg
 
 import discord
 
-from manibot import group, Cog, checks
+from manibot import group, Cog, checks, command
 from manibot.utils.formatters import make_embed
 from manibot.utils.fuzzymatch import get_partial_match
 
@@ -797,19 +797,29 @@ class Series(Cog):
     @checks.is_co_owner()
     async def lock_roles(self, ctx):
         series = await self.series_titles()
+        rss_cog = ctx.bot.get_cog("RSS")
+        role_id = await rss_cog.settings(ctx.guild.id, 'sub_role_id')
+        notif_role = ctx.get.role(role_id)
         roles = [await self.get_series_role(ctx.guild.id, title) for title in series]
+        if notif_role:
+            roles.append(notif_role)
         for role in roles:
             await role.edit(mentionable=False)
         await ctx.ok()
 
-    @series.command()
+    @command()
     @checks.is_admin()
-    async def unlock(self, ctx, *, title):
-        title = await self.check_series_input(ctx, title)
-        role = await self.get_series_role(ctx.guild.id, title)
+    async def unlock(self, ctx, *, title=None):
+        if title:
+            title = await self.check_series_input(ctx, title)
+            role = await self.get_series_role(ctx.guild.id, title)
+        else:
+            rss_cog = ctx.bot.get_cog("RSS")
+            role_id = await rss_cog.settings(ctx.guild.id, 'sub_role_id')
+            role = ctx.get.role(role_id)
 
         if not role:
-            return await ctx.error("There is no role for that series")
+            return await ctx.error("I couldn't find a role!")
 
         await role.edit(mentionable=True)
         await ctx.success(f"Role {role.name} unlocked",

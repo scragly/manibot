@@ -189,24 +189,39 @@ class RSSEntry:
         await self.wait_until_published()
 
         if do_ping:
-            role = await self.get_role(webhook.guild_id)
-            if role:
-                logger.info(f"Changing series role to mentionable - {self.item_id}")
-                try:
-                    await role.edit(mentionable=True)
-                except discord.Forbidden:
-                    pass
-                else:
-                    await asyncio.sleep(1)
+            roles = list()
+
+            s_role = await self.get_role(webhook.guild_id)
+            if s_role:
+                roles.append(s_role)
+
+            if webhook.sub_role_id:
+                n_role = await self.get_role(webhook.guild_id)
+                if n_role:
+                    roles.append(n_role)
+
+            if roles:
+                logger.info(f"Relocking notification roles - {self.item_id}")
+                for role in roles:
+                    try:
+                        await role.edit(mentionable=True)
+                    except discord.Forbidden:
+                        pass
+
+                await asyncio.sleep(1)
 
         logger.info(f"Pushing Update - {self.item_id}")
         await webhook.webhook.send(
             pings, embed=self.embed, avatar_url=webhook.avatar)
 
-        if do_ping and role:
+        if do_ping and roles:
             await asyncio.sleep(1)
             logger.info(f"Reverting series role to unmentionable - {self.item_id}")
-            await role.edit(mentionable=False)
+            for role in roles:
+                try:
+                    await role.edit(mentionable=False)
+                except discord.Forbidden:
+                    pass
 
     async def send_to_channel(self, channel):
         await channel.send(embed=self.embed)
