@@ -14,7 +14,7 @@ import sys
 
 import discord
 
-from manibot.core import logger, context
+from manibot.core import logger
 from manibot.core.bot import Bot
 from manibot.utils import ExitCodes
 
@@ -24,12 +24,12 @@ if discord.version_info.major < 1:
           "correctly. Please install the correct version.")
     sys.exit(1)
 
+
 def run_bot(debug=False, launcher=None, from_restart=False):
     """Sets up the bot, runs it and handles exit codes."""
 
-    # create async loop and setup contextvar
+    # create async loop
     loop = asyncio.get_event_loop()
-    context.ctx_setup(loop)
 
     # create bot instance
     description = "Manibot v1 - Beta"
@@ -71,6 +71,7 @@ def run_bot(debug=False, launcher=None, from_restart=False):
         code = bot.shutdown_mode
         sys.exit(code.value)
 
+
 def parse_cli_args():
     parser = argparse.ArgumentParser(
         description="Manibot - A Discord Bot for the Hatigarm Community.")
@@ -83,10 +84,10 @@ def parse_cli_args():
     return parser.parse_args()
 
 
-
 def main():
     args = parse_cli_args()
     run_bot(debug=args.debug, launcher=args.launcher, from_restart=args.fromrestart)
+
 
 if __name__ == '__main__':
     main()
