@@ -1,0 +1,27 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+discord-py = {git = "https://github.com/Rapptz/discord.py",ref = "3f06f24"}
+python-dateutil = ">=2.6"
+asyncpg = ">=0.13"
+python-levenshtein = ">=0.12"
+fuzzywuzzy = "*"
+psutil = "*"
+aiocontextvars = "*"
+colorthief = "*"
+more-itertools = "*"
+bs4 = "*"
+feedparser = "*"
+pytz = "*"
+pendulum = "*"
+
+[requires]
+python_version = "3.6"
+
+[scripts]
+bot = "python -m manibot"
