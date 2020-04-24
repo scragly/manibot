@@ -1,8 +1,8 @@
 import asyncio
-import datetime
 import logging
 import urllib
 import traceback
+from dateutil.parser import parse
 
 import aiohttp
 import bs4
@@ -15,21 +15,15 @@ from manibot import Cog, checks, command, group
 from manibot.utils.formatters import unescape_html
 from manibot.utils.datatypes import Map
 
-HATIGARMRSS = "https://www.hatigarmscans.net/feed"
+HATIGARMRSS = "https://hatigarmscanz.net/feed"
 
 logger = logging.getLogger('manibot.rss')
-
-def get_poster_url(item_url):
-    split = urllib.parse.urlsplit(item_url)
-    join = 'http://hatigarmscans.net/uploads' + split.path
-    imgurl = join.rsplit('/', 1)[0] + '/cover/cover_250x350.jpg'
-    return imgurl
 
 
 class RSSEntry:
 
     __slots__ = ('bot', 'dbi', 'data', 'title', 'link', 'author',
-                 'summary', 'content', 'item_id', 'updated')
+                 'summary', 'item_id', 'updated', '_content')
 
     def __init__(self, bot, data):
         self.bot = bot
@@ -39,20 +33,17 @@ class RSSEntry:
         self.link = data.link
         self.author = data.author
         self.summary = data.summary
-        self.content = str(data.content)
 
         # db data won't have it under id, but item_id
-        if not data.id:
-            self.item_id = data.item_id
-        else:
-            self.item_id = data.id
+        self.item_id = data.id if data.id else data.item_id
 
         # db data is already datetime object
         if isinstance(data.updated, str):
-            self.updated = datetime.datetime.strptime(
-                data.updated.rsplit('+', 1)[0], "%Y-%m-%dT%H:%M:%S")
+            self.updated = parse(data.updated).replace(tzinfo=None)
         else:
             self.updated = data.updated
+
+        self._content = None
 
     @property
     def data_table(self):
@@ -61,6 +52,17 @@ class RSSEntry:
     @property
     def query(self):
         return self.data_table.query.where(item_id=self.item_id)
+
+    async def content(self, fresh=False):
+        if not fresh and self._content:
+            return self._content
+
+        async with self.bot.session.get(self.item_id) as r:
+            if r.status != 200:
+                return False
+            content = await r.text()
+            self._content = bs4.BeautifulSoup(content, 'html.parser')
+        return self._content
 
     async def exists(self):
         value = await self.query.get_value('item_id')
@@ -72,8 +74,8 @@ class RSSEntry:
     async def insert(self):
         insert = self.data_table.insert(
             item_id=self.item_id, title=self.title, link=self.link,
-            updated=self.updated, author=self.author, summary=self.summary,
-            content=self.content)
+            updated=self.updated, author=self.author, summary=self.summary
+        )
         await insert.commit()
 
     async def series_title(self):
@@ -105,70 +107,39 @@ class RSSEntry:
         except Exception as e:
             logger.error(f'Exception {type(e)}: {e}')
 
-    async def first_page(self):
-        try:
-            async with self.bot.session.get(self.item_id) as r:
-                if r.status != 200:
-                    return False
-                content = await r.text()
-                soup = bs4.BeautifulSoup(content, 'html.parser')
-                allimgs = soup.find("div", {"id": "all"})
-                if not allimgs:
-                    return False
-                firstimg = allimgs.find("img")
-                if not firstimg:
-                    return False
-                return firstimg['data-src']
-        except aiohttp.ClientError as e:
-            logger.error(
-                f"Error Getting First Page "
-                f"({type(e)}) - Exception: {e}")
-            return None
+    async def poster_url(self):
+        content = await self.content()
+        image = content.find("meta", property="og:image")
+        return image["content"] if image else None
 
-    @property
-    def poster_url(self):
-        split = urllib.parse.urlsplit(self.item_id)
-        join = 'http://hatigarmscans.net/uploads' + split.path
-        imgurl = join.rsplit('/', 1)[0] + '/cover/cover_250x350.jpg'
-        return imgurl
-
-    @property
-    def embed_data(self):
-        poster = self.poster_url
-
+    async def embed_data(self):
+        poster = await self.poster_url()
         data = {
-            "color"      : 2272250,
-            "timestamp"  : self.updated.strftime("%Y-%m-%dT%H:%M:%S"),
-            "footer"     :{
-                "text"   : "Updated"
+            "color": 2272250,
+            "timestamp": self.updated.strftime("%Y-%m-%dT%H:%M:%S"),
+            "footer": {
+                "text": "Updated"
             },
-            "thumbnail"  :{
-                "url"    : poster
+            "thumbnail": {
+                "url": poster
             },
-            "author"     :{
-                "name"   : unescape_html(self.title),
-                "url"    : self.item_id
-            }
+            "author": {
+                "name": unescape_html(self.title),
+                "url": self.link,
+            },
+            "description": (
+                f"\U0001f4d6 [Read it at Hatigarm Scans!]({self.item_id})"
+            ),
         }
-
-        if not self.summary:
-            summary = '\u200b'
-
-        else:
-            summary = f"*{unescape_html(self.summary)}*\n"
-        data['description'] = (f"{summary}\n\U0001f4d6 "
-                               f"[Read it at Hatigarm Scans!]({self.item_id})")
         return data
 
-    @property
-    def embed(self):
-        return Embed.from_data(self.embed_data)
+    async def embed(self):
+        return Embed.from_data(await self.embed_data())
 
     async def get_role(self, guild_id):
         series_title = await self.series_title()
         if series_title:
-            return await self.bot.series.get_series_role(
-                guild_id, series_title)
+            return await self.bot.series.get_series_role(guild_id, series_title)
         return None
 
     async def get_mention(self, guild_id):
@@ -186,11 +157,10 @@ class RSSEntry:
         else:
             pings = ""
 
-        await self.wait_until_published()
+        # await self.wait_until_published()
 
+        roles = list()
         if do_ping:
-            roles = list()
-
             s_role = await self.get_role(webhook.guild_id)
             if s_role:
                 roles.append(s_role)
@@ -202,21 +172,21 @@ class RSSEntry:
                     roles.append(n_role)
 
             if roles:
-                logger.info(f"Relocking notification roles - {self.item_id}")
+                logger.info(f"Unlocking notification roles - {self.item_id}")
                 for role in roles:
                     try:
                         await role.edit(mentionable=True)
                     except discord.Forbidden:
                         pass
 
-                await asyncio.sleep(1)
+                await asyncio.sleep(5)
 
         logger.info(f"Pushing Update - {self.item_id}")
-        await webhook.webhook.send(
-            pings, embed=self.embed, avatar_url=webhook.avatar)
+        embed = await self.embed()
+        await webhook.webhook.send(pings, embed=embed, avatar_url=webhook.avatar)
 
         if do_ping and roles:
-            await asyncio.sleep(1)
+            await asyncio.sleep(5)
             logger.info(f"Reverting series role to unmentionable - {self.item_id}")
             for role in roles:
                 try:
@@ -225,7 +195,8 @@ class RSSEntry:
                     pass
 
     async def send_to_channel(self, channel):
-        await channel.send(embed=self.embed)
+        embed = await self.embed()
+        await channel.send(embed=embed)
 
     async def wait_until_published(self):
         logger.info(f"Check Published - {self.item_id}")
@@ -275,7 +246,8 @@ class RSS(Cog):
     def __unload(self):
         self.stop_updates()
 
-    async def on_message(self, message):
+    @staticmethod
+    async def on_message(message):
         if message.channel.id not in [328244845795737602, 444394290987270157, 465501965153992704]:
             return
         if message.content not in ['#iAm Notifbud', '##iAm Notifbud']:

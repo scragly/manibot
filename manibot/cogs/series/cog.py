@@ -262,7 +262,7 @@ class Series(Cog):
             f"{len(results)} series found with the {genre.title()} genre.",
             '\n'.join(titles))
 
-    @series.command()
+    @series.command(enabled=False)
     @checks.is_admin()
     async def autoadd(self, ctx, link):
         if link.startswith('<') and link.endswith('>'):
