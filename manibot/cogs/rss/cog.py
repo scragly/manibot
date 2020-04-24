@@ -643,14 +643,13 @@ class RSS(Cog):
 
             ctx.remove = True
 
-        if series_title:
+        if series_title and series_title != "all":
             return await self.sub_series(ctx, series_title)
 
         result = await self.global_subscribe(ctx, ctx.author, ctx.remove)
 
         if result is None:
-            return await ctx.error(
-                "A notification role hasn't been setup for this guild.")
+            return await ctx.error("A notification role hasn't been setup for this guild.")
 
         if not result:
             action = 'unsubscribed' if ctx.remove else 'subscribed'
